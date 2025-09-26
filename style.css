@@ -1,0 +1,39 @@
+body {
+  background: #222;
+  color: #f2f2f2;
+  font-family: Arial, sans-serif;
+  text-align: center;
+}
+
+#game-container {
+  display: inline-block;
+  background: #111;
+  padding: 16px;
+  border-radius: 8px;
+  margin-top: 30px;
+}
+
+#game-canvas {
+  display: block;
+  margin: 0 auto 8px auto;
+  background: #222;
+  border: 2px solid #888;
+  border-radius: 5px;
+}
+
+#ui {
+  margin-bottom: 10px;
+}
+
+#ui span {
+  margin: 0 15px;
+}
+
+#instructions {
+  margin-top: 12px;
+  background: #1b1b1b;
+  color: #c2ffd6;
+  padding: 10px;
+  border-radius: 5px;
+  font-size: 14px;
+}
