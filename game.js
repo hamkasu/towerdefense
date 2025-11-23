@@ -11,6 +11,10 @@ const CONFIG = {
   CANVAS_WIDTH: 1000,
   CANVAS_HEIGHT: 700,
 
+  // Map size (separate from viewport)
+  MAP_WIDTH: 3000,
+  MAP_HEIGHT: 2100,
+
   // Player
   PLAYER_RADIUS: 12,
   PLAYER_SPEED_STAND: 2.5,
@@ -1232,8 +1236,8 @@ class Level {
   }
 
   generate() {
-    const W = CONFIG.CANVAS_WIDTH;
-    const H = CONFIG.CANVAS_HEIGHT;
+    const W = CONFIG.MAP_WIDTH;
+    const H = CONFIG.MAP_HEIGHT;
 
     // Outer walls (concrete)
     this.addWall(0, 0, W, 20, 'concrete');
@@ -1241,62 +1245,194 @@ class Level {
     this.addWall(0, 0, 20, H, 'concrete');
     this.addWall(W-20, 0, 20, H, 'concrete');
 
-    // Building structure - a multi-room layout
-    // Main corridor
-    this.addWall(200, 20, 15, 250, 'concrete');
-    this.addWall(200, 320, 15, 360, 'concrete');
+    // === BUILDING 1: ENTRY (LEFT SIDE) ===
+    // Main corridor vertical wall
+    this.addWall(400, 20, 15, 450, 'concrete');
+    this.addWall(400, 520, 15, 500, 'concrete');
+    this.addDoor(400, 470, 15, 50, 'vertical');
 
-    // Room 1 (top left) - Office
-    this.addWall(20, 200, 180, 12, 'drywall');
-    this.addDoor(100, 200, 50, 12, 'horizontal');
+    // Room 1A (top left) - Reception
+    this.addWall(20, 300, 380, 12, 'drywall');
+    this.addDoor(200, 300, 60, 12, 'horizontal');
+    this.addWall(200, 20, 12, 280, 'drywall');
+    this.addDoor(200, 150, 12, 60, 'vertical');
 
-    // Room 2 (middle left) - Storage
-    this.addWall(20, 400, 180, 12, 'drywall');
-    this.addDoor(80, 400, 50, 12, 'horizontal');
+    // Room 1B (bottom left) - Storage
+    this.addWall(20, 600, 380, 12, 'drywall');
+    this.addDoor(150, 600, 60, 12, 'horizontal');
+    this.addWall(200, 612, 12, 300, 'drywall');
+    this.addDoor(200, 750, 12, 60, 'vertical');
 
-    // Central area walls
-    this.addWall(350, 20, 15, 180, 'drywall');
-    this.addWall(350, 250, 15, 150, 'concrete');
-    this.addWall(350, 450, 15, 230, 'drywall');
+    // Room 1C (far bottom left) - Basement
+    this.addWall(20, 900, 180, 12, 'concrete');
+    this.addDoor(100, 900, 50, 12, 'horizontal');
 
-    // Right side structure
-    this.addWall(500, 150, 15, 200, 'drywall');
-    this.addDoor(500, 220, 15, 60, 'vertical');
+    // === BUILDING 2: CENTRAL HUB ===
+    // Vertical walls
+    this.addWall(800, 20, 15, 400, 'concrete');
+    this.addWall(800, 470, 15, 500, 'concrete');
+    this.addDoor(800, 420, 15, 50, 'vertical');
 
-    this.addWall(500, 400, 15, 150, 'concrete');
-    this.addWall(650, 250, 15, 300, 'drywall');
-    this.addDoor(650, 350, 15, 80, 'vertical');
+    // Horizontal connections
+    this.addWall(415, 400, 385, 12, 'drywall');
+    this.addDoor(550, 400, 60, 12, 'horizontal');
+    this.addWall(415, 700, 385, 12, 'drywall');
+    this.addDoor(650, 700, 60, 12, 'horizontal');
 
-    // Top right room
-    this.addWall(700, 150, 280, 12, 'drywall');
-    this.addWall(800, 20, 12, 130, 'drywall');
-    this.addDoor(800, 80, 12, 50, 'vertical');
+    // Central rooms
+    this.addWall(550, 412, 12, 140, 'drywall');
+    this.addDoor(550, 470, 12, 50, 'vertical');
+    this.addWall(650, 412, 12, 140, 'drywall');
+    this.addDoor(650, 470, 12, 50, 'vertical');
 
-    // Bottom right secure room (metal walls)
-    this.addWall(750, 500, 230, 12, 'metal');
-    this.addWall(750, 500, 12, 180, 'metal');
-    this.addDoor(750, 560, 12, 60, 'vertical');
+    // Top central area
+    this.addWall(550, 150, 12, 200, 'drywall');
+    this.addWall(550, 150, 250, 12, 'drywall');
+    this.addDoor(680, 150, 60, 12, 'horizontal');
+    this.addDoor(550, 250, 12, 50, 'vertical');
 
-    // Some glass windows
-    this.addWall(215, 100, 135, 8, 'glass');
-    this.addWall(515, 80, 8, 70, 'glass');
+    // === BUILDING 3: RIGHT WING ===
+    this.addWall(1200, 20, 15, 600, 'concrete');
+    this.addWall(1200, 670, 15, 500, 'concrete');
+    this.addDoor(1200, 620, 15, 50, 'vertical');
 
-    // Cover objects (wood)
-    this.addWall(280, 300, 40, 15, 'wood');
-    this.addWall(420, 180, 15, 40, 'wood');
-    this.addWall(600, 500, 30, 15, 'wood');
+    // Offices right side
+    this.addWall(815, 300, 385, 12, 'drywall');
+    this.addDoor(1000, 300, 60, 12, 'horizontal');
+    this.addWall(1000, 20, 12, 280, 'drywall');
+    this.addDoor(1000, 150, 12, 60, 'vertical');
 
-    // Spawn points
+    // Conference room
+    this.addWall(815, 550, 385, 15, 'glass');
+    this.addDoor(950, 550, 15, 60, 'vertical');
+
+    // Server room (metal)
+    this.addWall(900, 800, 300, 12, 'metal');
+    this.addWall(900, 800, 12, 200, 'metal');
+    this.addWall(900, 1000, 300, 12, 'metal');
+    this.addDoor(900, 880, 12, 60, 'vertical');
+
+    // === BUILDING 4: FAR RIGHT COMPOUND ===
+    this.addWall(1600, 20, 15, 800, 'concrete');
+    this.addWall(1600, 870, 15, 700, 'concrete');
+    this.addDoor(1600, 820, 15, 50, 'vertical');
+
+    // Upper compound
+    this.addWall(1215, 400, 385, 15, 'concrete');
+    this.addDoor(1400, 400, 60, 15, 'horizontal');
+
+    // Research labs
+    this.addWall(1400, 20, 12, 380, 'drywall');
+    this.addDoor(1400, 200, 12, 60, 'vertical');
+    this.addWall(1300, 200, 100, 12, 'glass');
+
+    // Lower compound rooms
+    this.addWall(1215, 600, 200, 12, 'drywall');
+    this.addDoor(1300, 600, 50, 12, 'horizontal');
+    this.addWall(1450, 600, 150, 12, 'drywall');
+    this.addDoor(1500, 600, 50, 12, 'horizontal');
+
+    // === BUILDING 5: SOUTHERN COMPLEX ===
+    this.addWall(400, 1100, 800, 15, 'concrete');
+    this.addDoor(750, 1100, 60, 15, 'horizontal');
+
+    // South rooms
+    this.addWall(600, 1115, 12, 300, 'drywall');
+    this.addDoor(600, 1200, 12, 60, 'vertical');
+    this.addWall(900, 1115, 12, 300, 'drywall');
+    this.addDoor(900, 1250, 12, 60, 'vertical');
+
+    // Armory (metal)
+    this.addWall(1100, 1115, 12, 200, 'metal');
+    this.addWall(1100, 1300, 200, 12, 'metal');
+    this.addDoor(1100, 1200, 12, 50, 'vertical');
+
+    // === OUTDOOR AREAS ===
+    // Courtyard walls
+    this.addWall(1700, 500, 300, 15, 'concrete');
+    this.addWall(1700, 500, 15, 400, 'concrete');
+    this.addWall(1700, 900, 300, 15, 'concrete');
+    this.addDoor(1700, 680, 15, 60, 'vertical');
+
+    // Guard tower
+    this.addWall(2200, 200, 200, 15, 'concrete');
+    this.addWall(2200, 200, 15, 200, 'concrete');
+    this.addWall(2200, 400, 200, 15, 'concrete');
+    this.addWall(2400, 200, 15, 200, 'concrete');
+    this.addDoor(2200, 280, 15, 60, 'vertical');
+
+    // Warehouse
+    this.addWall(2000, 700, 400, 15, 'metal');
+    this.addWall(2000, 700, 15, 400, 'metal');
+    this.addWall(2000, 1100, 400, 15, 'metal');
+    this.addWall(2400, 700, 15, 400, 'metal');
+    this.addDoor(2000, 850, 15, 80, 'vertical');
+    this.addDoor(2150, 700, 80, 15, 'horizontal');
+
+    // Additional warehouse interior
+    this.addWall(2150, 850, 12, 200, 'drywall');
+    this.addWall(2300, 800, 12, 150, 'wood');
+
+    // === PERIMETER STRUCTURES ===
+    // North fence with gap
+    this.addWall(1700, 100, 600, 12, 'concrete');
+    this.addWall(2400, 100, 580, 12, 'concrete');
+
+    // East compound
+    this.addWall(2600, 300, 15, 600, 'concrete');
+    this.addWall(2600, 950, 15, 600, 'concrete');
+    this.addDoor(2600, 900, 15, 50, 'vertical');
+
+    this.addWall(2615, 500, 300, 12, 'drywall');
+    this.addDoor(2750, 500, 60, 12, 'horizontal');
+    this.addWall(2615, 800, 300, 12, 'drywall');
+    this.addDoor(2700, 800, 60, 12, 'horizontal');
+
+    // === COVER OBJECTS ===
+    // Various cover throughout the map
+    this.addWall(500, 200, 40, 20, 'wood');
+    this.addWall(700, 550, 50, 20, 'wood');
+    this.addWall(1050, 450, 20, 50, 'wood');
+    this.addWall(1350, 550, 40, 20, 'wood');
+    this.addWall(1800, 650, 30, 30, 'wood');
+    this.addWall(2250, 950, 40, 20, 'wood');
+    this.addWall(450, 800, 30, 30, 'wood');
+    this.addWall(1500, 900, 50, 20, 'wood');
+    this.addWall(2100, 350, 30, 40, 'wood');
+    this.addWall(2700, 650, 40, 20, 'wood');
+
+    // Glass windows throughout
+    this.addWall(250, 100, 100, 8, 'glass');
+    this.addWall(600, 80, 8, 60, 'glass');
+    this.addWall(1100, 100, 80, 8, 'glass');
+    this.addWall(1800, 300, 8, 100, 'glass');
+    this.addWall(2500, 400, 80, 8, 'glass');
+
+    // === SPAWN POINTS ===
     this.spawnPoints.team = [
-      {x: 60, y: 60}, {x: 100, y: 60}, {x: 60, y: 100}
-    ];
-    this.spawnPoints.enemy = [
-      {x: 850, y: 600}, {x: 900, y: 550}, {x: 600, y: 300},
-      {x: 450, y: 350}, {x: 300, y: 500}
+      {x: 60, y: 60}, {x: 100, y: 60}, {x: 60, y: 100}, {x: 100, y: 100}
     ];
 
-    // Objective (hostage location)
-    this.objectives.push({x: 850, y: 580, type: 'hostage', secured: false});
+    this.spawnPoints.enemy = [
+      // Building entrances
+      {x: 2850, y: 600}, {x: 2850, y: 700},
+      // Guard tower
+      {x: 2300, y: 300},
+      // Warehouse
+      {x: 2200, y: 900}, {x: 2300, y: 1000},
+      // Far right compound
+      {x: 1500, y: 300}, {x: 1700, y: 700},
+      // Central areas
+      {x: 1100, y: 900}, {x: 700, y: 500},
+      // Roaming
+      {x: 1900, y: 400}, {x: 2500, y: 1000},
+      {x: 1000, y: 600}, {x: 600, y: 1300}
+    ];
+
+    // === OBJECTIVES ===
+    this.objectives.push({x: 2850, y: 650, type: 'hostage', secured: false});
+    this.objectives.push({x: 2300, y: 950, type: 'intel', secured: false});
+    this.objectives.push({x: 1000, y: 900, type: 'bomb', secured: false});
   }
 
   addWall(x, y, w, h, material) {
@@ -1473,21 +1609,21 @@ class Level {
   draw(ctx) {
     // Floor
     ctx.fillStyle = '#2a2a35';
-    ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+    ctx.fillRect(0, 0, CONFIG.MAP_WIDTH, CONFIG.MAP_HEIGHT);
 
     // Grid pattern
     ctx.strokeStyle = '#333340';
     ctx.lineWidth = 1;
-    for (let x = 0; x < CONFIG.CANVAS_WIDTH; x += 50) {
+    for (let x = 0; x < CONFIG.MAP_WIDTH; x += 50) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x, CONFIG.CANVAS_HEIGHT);
+      ctx.lineTo(x, CONFIG.MAP_HEIGHT);
       ctx.stroke();
     }
-    for (let y = 0; y < CONFIG.CANVAS_HEIGHT; y += 50) {
+    for (let y = 0; y < CONFIG.MAP_HEIGHT; y += 50) {
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(CONFIG.CANVAS_WIDTH, y);
+      ctx.lineTo(CONFIG.MAP_WIDTH, y);
       ctx.stroke();
     }
 
@@ -1524,11 +1660,18 @@ class Level {
     // Objectives
     for (const obj of this.objectives) {
       if (obj.secured) continue;
-      ctx.fillStyle = '#ffff0044';
+      // Different colors for different objective types
+      const colors = {
+        hostage: { fill: '#ffff0044', stroke: '#ffff00' },
+        intel: { fill: '#00ff0044', stroke: '#00ff00' },
+        bomb: { fill: '#ff000044', stroke: '#ff0000' }
+      };
+      const color = colors[obj.type] || colors.hostage;
+      ctx.fillStyle = color.fill;
       ctx.beginPath();
       ctx.arc(obj.x, obj.y, 20, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = '#ffff00';
+      ctx.strokeStyle = color.stroke;
       ctx.lineWidth = 2;
       ctx.stroke();
     }
@@ -1682,9 +1825,9 @@ class Player {
     if (!level.isSolid(nextX, this.y)) this.x = nextX;
     if (!level.isSolid(this.x, nextY)) this.y = nextY;
 
-    // Clamp to bounds
-    this.x = utils.clamp(this.x, 30, CONFIG.CANVAS_WIDTH - 30);
-    this.y = utils.clamp(this.y, 30, CONFIG.CANVAS_HEIGHT - 30);
+    // Clamp to bounds (use MAP dimensions)
+    this.x = utils.clamp(this.x, 30, CONFIG.MAP_WIDTH - 30);
+    this.y = utils.clamp(this.y, 30, CONFIG.MAP_HEIGHT - 30);
 
     // Timers
     if (this.fireTimer > 0) this.fireTimer--;
@@ -2203,8 +2346,17 @@ class Game {
     this.smokeClouds = [];
     this.breachCharges = [];
 
+    // Camera system
+    this.cameraX = 0;
+    this.cameraY = 0;
+
+    // Mouse in world coordinates
     this.mouseX = 0;
     this.mouseY = 0;
+    // Mouse in screen coordinates
+    this.mouseScreenX = 0;
+    this.mouseScreenY = 0;
+
     this.isRunning = false;
     this.isPaused = false;
     this.missionComplete = false;
@@ -2291,8 +2443,29 @@ class Game {
     requestAnimationFrame(() => this.gameLoop());
   }
 
+  updateCamera() {
+    // Camera follows player, centered on screen
+    const targetX = this.player.x - CONFIG.CANVAS_WIDTH / 2;
+    const targetY = this.player.y - CONFIG.CANVAS_HEIGHT / 2;
+
+    // Smooth camera movement
+    this.cameraX = utils.lerp(this.cameraX, targetX, 0.1);
+    this.cameraY = utils.lerp(this.cameraY, targetY, 0.1);
+
+    // Clamp camera to map bounds
+    this.cameraX = utils.clamp(this.cameraX, 0, CONFIG.MAP_WIDTH - CONFIG.CANVAS_WIDTH);
+    this.cameraY = utils.clamp(this.cameraY, 0, CONFIG.MAP_HEIGHT - CONFIG.CANVAS_HEIGHT);
+
+    // Update world mouse coordinates
+    this.mouseX = this.mouseScreenX + this.cameraX;
+    this.mouseY = this.mouseScreenY + this.cameraY;
+  }
+
   update() {
     if (this.isPaused || this.missionComplete || this.missionFailed) return;
+
+    // Update camera
+    this.updateCamera();
 
     // Update player
     this.player.update(this.mouseX, this.mouseY, this.level);
@@ -2559,9 +2732,12 @@ class Game {
       );
     }
 
-    // Clear
+    // Apply camera translation
+    ctx.translate(-this.cameraX, -this.cameraY);
+
+    // Clear (larger area for map)
     ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+    ctx.fillRect(this.cameraX, this.cameraY, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
 
     // Level
     this.level.draw(ctx);
@@ -2605,12 +2781,101 @@ class Game {
       ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
     }
 
+    // Draw minimap (always on top, not affected by camera)
+    this.drawMinimap(ctx);
+
     // Mission overlays
     if (this.missionComplete) {
       this.drawOverlay(ctx, 'MISSION COMPLETE', '#00ff00');
     } else if (this.missionFailed) {
       this.drawOverlay(ctx, 'MISSION FAILED', '#ff0000');
     }
+  }
+
+  drawMinimap(ctx) {
+    const minimapWidth = 200;
+    const minimapHeight = 140;
+    const minimapX = CONFIG.CANVAS_WIDTH - minimapWidth - 10;
+    const minimapY = 10;
+    const scaleX = minimapWidth / CONFIG.MAP_WIDTH;
+    const scaleY = minimapHeight / CONFIG.MAP_HEIGHT;
+
+    // Background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(minimapX, minimapY, minimapWidth, minimapHeight);
+
+    // Border
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(minimapX, minimapY, minimapWidth, minimapHeight);
+
+    // Draw walls
+    ctx.fillStyle = '#666';
+    for (const wall of this.level.walls) {
+      if (wall.destroyed) continue;
+      ctx.fillRect(
+        minimapX + wall.x * scaleX,
+        minimapY + wall.y * scaleY,
+        Math.max(1, wall.w * scaleX),
+        Math.max(1, wall.h * scaleY)
+      );
+    }
+
+    // Draw doors
+    for (const door of this.level.doors) {
+      if (door.destroyed) continue;
+      ctx.fillStyle = door.open ? '#333' : '#654321';
+      ctx.fillRect(
+        minimapX + door.x * scaleX,
+        minimapY + door.y * scaleY,
+        Math.max(1, door.w * scaleX),
+        Math.max(1, door.h * scaleY)
+      );
+    }
+
+    // Draw objectives
+    for (const obj of this.level.objectives) {
+      if (obj.secured) continue;
+      const colors = { hostage: '#ffff00', intel: '#00ff00', bomb: '#ff0000' };
+      ctx.fillStyle = colors[obj.type] || '#ffff00';
+      ctx.beginPath();
+      ctx.arc(minimapX + obj.x * scaleX, minimapY + obj.y * scaleY, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Draw enemies (red dots)
+    ctx.fillStyle = '#ff0000';
+    for (const enemy of this.enemies) {
+      if (enemy.isDead) continue;
+      ctx.beginPath();
+      ctx.arc(minimapX + enemy.x * scaleX, minimapY + enemy.y * scaleY, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Draw teammates (blue dots)
+    ctx.fillStyle = '#4a7cc9';
+    for (const tm of this.teammates) {
+      if (tm.isDead || tm.isLocal) continue;
+      ctx.beginPath();
+      ctx.arc(minimapX + tm.x * scaleX, minimapY + tm.y * scaleY, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Draw player (white dot, larger)
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(minimapX + this.player.x * scaleX, minimapY + this.player.y * scaleY, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw viewport rectangle
+    ctx.strokeStyle = '#ffffff44';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      minimapX + this.cameraX * scaleX,
+      minimapY + this.cameraY * scaleY,
+      CONFIG.CANVAS_WIDTH * scaleX,
+      CONFIG.CANVAS_HEIGHT * scaleY
+    );
   }
 
   drawOverlay(ctx, text, color) {
@@ -2688,8 +2953,11 @@ class Game {
 
   handleMouseMove(e) {
     const rect = this.canvas.getBoundingClientRect();
-    this.mouseX = e.clientX - rect.left;
-    this.mouseY = e.clientY - rect.top;
+    this.mouseScreenX = e.clientX - rect.left;
+    this.mouseScreenY = e.clientY - rect.top;
+    // World coordinates are calculated in updateCamera()
+    this.mouseX = this.mouseScreenX + this.cameraX;
+    this.mouseY = this.mouseScreenY + this.cameraY;
   }
 
   handleMouseDown(e) {
