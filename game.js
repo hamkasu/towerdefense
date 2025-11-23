@@ -130,7 +130,7 @@ const CONFIG = {
 class SoundSystem {
   constructor() {
     this.enabled = true;
-    this.volume = 0.3;
+    this.volume = 0.7;
     this.ctx = null;
     this.initialized = false;
     this.compressor = null;
