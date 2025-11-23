@@ -3,88 +3,79 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Close Quarter Combat - Team Arena</title>
+  <title>VISCERA: Tactical Breach</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="game-container">
-    <h1>Close Quarter Combat</h1>
-    <p class="subtitle">Team Arena</p>
+    <!-- MENU SCREEN -->
+    <div id="menu-screen">
+      <div class="menu-content">
+        <h1 class="title">VISCERA</h1>
+        <p class="subtitle">TACTICAL BREACH</p>
+        <p class="tagline">One Room. One Moment. One Shot.</p>
 
-    <!-- LOBBY SCREEN -->
-    <div id="lobby-screen">
-      <div class="lobby-section">
-        <h3>Player Setup</h3>
-        <div class="input-group">
-          <label for="player-name">Your Name</label>
-          <input type="text" id="player-name" placeholder="Enter your name" maxlength="12">
+        <div class="menu-section">
+          <button id="start-btn" class="btn-primary">BEGIN MISSION</button>
+          <button id="sound-toggle" class="btn-secondary">Sound: ON</button>
         </div>
-        <div class="input-group">
-          <label for="ai-count">AI Teammates</label>
-          <select id="ai-count">
-            <option value="1">1 AI Teammate</option>
-            <option value="2" selected>2 AI Teammates</option>
-            <option value="3">3 AI Teammates</option>
-          </select>
-        </div>
-      </div>
 
-      <div class="lobby-section">
-        <h3>Play Options</h3>
-        <div class="lobby-buttons">
-          <button id="play-offline-btn" class="btn-primary">Play Offline</button>
-          <div class="divider"><span>or play online</span></div>
-          <button id="create-room-btn" class="btn-secondary">Create Room</button>
-          <div class="join-room-group">
-            <input type="text" id="room-code-input" placeholder="Room Code" maxlength="4">
-            <button id="join-room-btn" class="btn-secondary">Join</button>
+        <div class="controls-info">
+          <h3>CONTROLS</h3>
+          <div class="controls-grid">
+            <div class="control-item"><span class="key">WASD</span> Move</div>
+            <div class="control-item"><span class="key">SHIFT</span> Sprint</div>
+            <div class="control-item"><span class="key">C</span> Change Stance</div>
+            <div class="control-item"><span class="key">Q/E</span> Lean Left/Right</div>
+            <div class="control-item"><span class="key">LMB</span> Fire</div>
+            <div class="control-item"><span class="key">RMB</span> Aim Down Sights</div>
+            <div class="control-item"><span class="key">R</span> Reload</div>
+            <div class="control-item"><span class="key">1-2</span> Switch Weapon</div>
+            <div class="control-item"><span class="key">G</span> Throw Grenade</div>
+            <div class="control-item"><span class="key">H</span> Cycle Grenade Type</div>
+            <div class="control-item"><span class="key">F</span> Open Door</div>
           </div>
         </div>
-      </div>
 
-      <div class="lobby-section room-info" style="display: none;">
-        <h3>Room: <span id="current-room-code">----</span></h3>
-        <p class="connection-status">Status: <span id="connection-status" class="status-offline">Offline</span></p>
-        <ul id="players-list"></ul>
-      </div>
-
-      <div class="instructions-mini">
-        <p><strong>Controls:</strong> WASD to move | Left Click to attack | Right Click/Space to dash</p>
+        <div class="briefing">
+          <h3>MISSION BRIEFING</h3>
+          <p>Hostile forces have occupied the facility. Clear all threats.</p>
+          <p class="tip">TIP: Bullets penetrate drywall and wood. Use cover wisely.</p>
+        </div>
       </div>
     </div>
 
     <!-- GAME SCREEN -->
     <div id="game-screen" style="display: none;">
-      <canvas id="game-canvas" width="900" height="650"></canvas>
+      <canvas id="game-canvas"></canvas>
+    </div>
 
-      <div id="ui">
-        <div id="controls">
-          <button id="start-wave-btn" class="btn-primary">Next Wave</button>
-          <button id="leave-room-btn" class="btn-danger">Leave</button>
-          <button id="sound-toggle-btn" class="btn-small">Sound: ON</button>
+    <!-- HUD -->
+    <div id="hud" style="display: none;">
+      <div class="hud-left">
+        <div class="health-container">
+          <div class="health-label">HEALTH</div>
+          <div class="health-bar">
+            <div id="health-fill" class="health-fill"></div>
+          </div>
         </div>
-        <div id="stats">
-          <span id="score">Score: 0</span>
-          <span id="team-score">Team: 0</span>
-          <span id="wave">Wave: 0</span>
-          <span id="combo" style="display: none;">Combo: x1</span>
+        <div class="stance-container">
+          <span id="stance-text">Stand</span>
         </div>
       </div>
 
-      <div id="instructions">
-        <h3>Controls</h3>
-        <ul>
-          <li><strong>WASD</strong> or <strong>Arrow Keys</strong> - Move</li>
-          <li><strong>Left Click</strong> - Melee Attack</li>
-          <li><strong>Right Click</strong> or <strong>Space</strong> - Dash</li>
-          <li><strong>R</strong> - Restart (when game over)</li>
-        </ul>
-        <h3>Team Tips</h3>
-        <ul>
-          <li>Your AI teammates will fight alongside you</li>
-          <li>Dead teammates respawn between waves</li>
-          <li>Game ends when entire team is eliminated</li>
-        </ul>
+      <div class="hud-center">
+        <div id="enemies-count">Enemies: 5</div>
+      </div>
+
+      <div class="hud-right">
+        <div class="weapon-info">
+          <div id="weapon-name">M4 Rifle</div>
+          <div id="ammo-count">30/90</div>
+        </div>
+        <div class="grenade-info">
+          <div id="grenade-count">FRAG: 2</div>
+        </div>
       </div>
     </div>
   </div>
