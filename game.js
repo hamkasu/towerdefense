@@ -22,6 +22,55 @@ const CONFIG = {
   PLAYER_SPEED_PRONE: 0.6,
   PLAYER_MAX_HP: 100,
 
+  // Team Formations - positions relative to player (angle offset, distance)
+  FORMATIONS: {
+    follow: {
+      name: 'Follow',
+      description: 'Teammates follow behind the player',
+      positions: [
+        { angleOffset: Math.PI * 0.85, distance: 60 },   // Back-left
+        { angleOffset: Math.PI * 1.15, distance: 60 },   // Back-right
+        { angleOffset: Math.PI, distance: 90 }           // Directly behind
+      ]
+    },
+    closeCombat: {
+      name: 'Close Combat',
+      description: 'Tight formation for room clearing and CQB',
+      positions: [
+        { angleOffset: Math.PI * 0.5, distance: 35 },    // Close left
+        { angleOffset: Math.PI * -0.5, distance: 35 },   // Close right
+        { angleOffset: Math.PI, distance: 45 }           // Close behind
+      ]
+    },
+    wedge: {
+      name: 'Wedge',
+      description: 'V-formation for open areas',
+      positions: [
+        { angleOffset: Math.PI * 0.7, distance: 70 },    // Back-left
+        { angleOffset: Math.PI * 1.3, distance: 70 },    // Back-right
+        { angleOffset: Math.PI, distance: 100 }          // Far behind
+      ]
+    },
+    line: {
+      name: 'Line',
+      description: 'Single file line for narrow corridors',
+      positions: [
+        { angleOffset: Math.PI, distance: 50 },          // Behind 1
+        { angleOffset: Math.PI, distance: 100 },         // Behind 2
+        { angleOffset: Math.PI, distance: 150 }          // Behind 3
+      ]
+    },
+    diamond: {
+      name: 'Diamond',
+      description: 'All-around security formation',
+      positions: [
+        { angleOffset: Math.PI * 0.5, distance: 50 },    // Left
+        { angleOffset: Math.PI * -0.5, distance: 50 },   // Right
+        { angleOffset: Math.PI, distance: 70 }           // Back
+      ]
+    }
+  },
+
   // Stance accuracy multipliers
   ACCURACY_STAND: 1.0,
   ACCURACY_CROUCH: 0.7,
@@ -2951,6 +3000,10 @@ class Game {
     // Map selection
     this.selectedMap = 'compound';
 
+    // Team formation
+    this.currentFormation = 'closeCombat';
+    this.formationKeys = Object.keys(CONFIG.FORMATIONS);
+
     // Camera system
     this.cameraX = 0;
     this.cameraY = 0;
@@ -3110,10 +3163,11 @@ class Game {
       }
     }
 
-    // Update AI teammates (simplified)
-    for (const tm of this.teammates) {
+    // Update AI teammates with formation
+    for (let i = 0; i < this.teammates.length; i++) {
+      const tm = this.teammates[i];
       if (tm.isAI && !tm.isDead) {
-        this.updateAITeammate(tm);
+        this.updateAITeammate(tm, i);
       }
     }
 
@@ -3175,9 +3229,20 @@ class Game {
     this.updateHUD();
   }
 
-  updateAITeammate(tm) {
-    // Simple AI: follow player and engage enemies
-    const dist = utils.distance(tm.x, tm.y, this.player.x, this.player.y);
+  updateAITeammate(tm, index) {
+    // Get formation position for this teammate
+    const formation = CONFIG.FORMATIONS[this.currentFormation];
+    const posIndex = index - 1; // index 0 is player, teammates start at 1
+    const formationPos = formation.positions[posIndex] || formation.positions[0];
+
+    // Calculate target position based on player's facing direction
+    const playerAngle = this.player.angle;
+    const targetAngle = playerAngle + formationPos.angleOffset;
+    const targetX = this.player.x + Math.cos(targetAngle) * formationPos.distance;
+    const targetY = this.player.y + Math.sin(targetAngle) * formationPos.distance;
+
+    const distToTarget = utils.distance(tm.x, tm.y, targetX, targetY);
+    const distToPlayer = utils.distance(tm.x, tm.y, this.player.x, this.player.y);
 
     // Find nearest visible enemy
     let nearestEnemy = null;
@@ -3192,7 +3257,7 @@ class Game {
     }
 
     if (nearestEnemy && nearestDist < 250) {
-      // Combat
+      // Combat - engage enemy but try to maintain formation
       tm.angle = utils.angle(tm.x, tm.y, nearestEnemy.x, nearestEnemy.y);
       if (tm.fireTimer <= 0 && tm.weapon.ammo > 0) {
         tm.fireTimer = tm.weapon.fireRate + Math.random() * 5;
@@ -3205,14 +3270,32 @@ class Game {
         this.shellCasings.push(new ShellCasing(tm.x, tm.y, tm.angle));
         sound.play(tm.weapon.sound, tm.x, tm.y);
       }
-    } else if (dist > 80) {
-      // Follow player
-      tm.angle = utils.angle(tm.x, tm.y, this.player.x, this.player.y);
-      const speed = tm.speed * 0.8;
-      const nextX = tm.x + Math.cos(tm.angle) * speed;
-      const nextY = tm.y + Math.sin(tm.angle) * speed;
+
+      // In close combat formation, stay tighter even during combat
+      if (this.currentFormation === 'closeCombat' && distToTarget > 20) {
+        const moveAngle = utils.angle(tm.x, tm.y, targetX, targetY);
+        const speed = tm.speed * 0.4;
+        const nextX = tm.x + Math.cos(moveAngle) * speed;
+        const nextY = tm.y + Math.sin(moveAngle) * speed;
+        if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
+        if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
+      }
+    } else if (distToTarget > 15) {
+      // Move to formation position
+      const moveAngle = utils.angle(tm.x, tm.y, targetX, targetY);
+      // Move faster if far from position, slower when close
+      const speedMult = distToTarget > 100 ? 1.0 : distToTarget > 50 ? 0.8 : 0.6;
+      const speed = tm.speed * speedMult;
+      const nextX = tm.x + Math.cos(moveAngle) * speed;
+      const nextY = tm.y + Math.sin(moveAngle) * speed;
       if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
       if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
+
+      // Face the direction player is facing when moving in formation
+      tm.angle = playerAngle;
+    } else {
+      // In position - face the same direction as player
+      tm.angle = playerAngle;
     }
 
     if (tm.fireTimer > 0) tm.fireTimer--;
@@ -3220,6 +3303,13 @@ class Game {
       tm.weapon.ammo = tm.weapon.magSize;
       tm.weapon.reserveAmmo -= tm.weapon.magSize;
     }
+  }
+
+  cycleFormation() {
+    const currentIndex = this.formationKeys.indexOf(this.currentFormation);
+    const nextIndex = (currentIndex + 1) % this.formationKeys.length;
+    this.currentFormation = this.formationKeys[nextIndex];
+    return CONFIG.FORMATIONS[this.currentFormation];
   }
 
   handleGrenadeExplosion(grenade) {
@@ -3348,6 +3438,12 @@ class Game {
 
     document.getElementById('enemies-count').textContent =
       `Enemies: ${this.enemies.filter(e => !e.isDead).length}`;
+
+    // Update formation display
+    const formationEl = document.getElementById('formation-text');
+    if (formationEl) {
+      formationEl.textContent = CONFIG.FORMATIONS[this.currentFormation].name;
+    }
   }
 
   draw() {
@@ -3562,6 +3658,10 @@ class Game {
       case 'f':
         // Interact - open doors
         this.level.openDoor(this.player.x, this.player.y, 40);
+        break;
+      case 't':
+        // Cycle team formation
+        this.cycleFormation();
         break;
     }
   }

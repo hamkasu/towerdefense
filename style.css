@@ -333,6 +333,29 @@ button {
   letter-spacing: 1px;
 }
 
+/* Formation */
+.formation-container {
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 5px;
+  padding: 5px 10px;
+  background: rgba(196, 30, 58, 0.1);
+  border: 1px solid rgba(196, 30, 58, 0.3);
+  border-radius: 3px;
+}
+
+.formation-label {
+  color: #666;
+  margin-right: 5px;
+}
+
+#formation-text {
+  color: #c41e3a;
+  font-weight: 700;
+}
+
 /* Weapon Info */
 .weapon-info {
   text-align: left;
