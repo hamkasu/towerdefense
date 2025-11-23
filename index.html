@@ -2,26 +2,39 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Tower Defense Prototype</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tower Defense Game</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Tower Defense Prototype</h1>
   <div id="game-container">
+    <h1>Tower Defense</h1>
+
     <canvas id="game-canvas" width="640" height="480"></canvas>
+
     <div id="ui">
-      <button id="start-btn">Start Wave</button>
-      <span id="money">Money: $100</span>
-      <span id="lives">Lives: 10</span>
-      <span id="wave">Wave: 1</span>
+      <div id="controls">
+        <button id="start-btn">Start Wave</button>
+        <button id="restart-btn" style="display: none;">Restart Game</button>
+      </div>
+      <div id="stats">
+        <span id="money">Money: $100</span>
+        <span id="lives">Lives: 10</span>
+        <span id="wave">Wave: 1</span>
+      </div>
     </div>
+
     <div id="instructions">
-      <b>Instructions:</b> <br>
-      Click on grass tiles to place towers ($50 each). <br>
-      Towers shoot enemies automatically. <br>
-      Stop enemies from reaching the end!
+      <h3>How to Play</h3>
+      <ul>
+        <li>Click <strong>Start Wave</strong> to begin spawning enemies</li>
+        <li>Click on grass tiles to place towers ($50 each)</li>
+        <li>Towers automatically shoot enemies in range</li>
+        <li>Stop enemies from reaching the end of the path!</li>
+      </ul>
     </div>
   </div>
+
   <script src="game.js"></script>
 </body>
 </html>
