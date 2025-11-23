@@ -3,34 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tower Defense Game</title>
+  <title>Close Quarter Combat</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="game-container">
-    <h1>Tower Defense</h1>
+    <h1>Close Quarter Combat</h1>
 
-    <canvas id="game-canvas" width="640" height="480"></canvas>
+    <canvas id="game-canvas" width="800" height="600"></canvas>
 
     <div id="ui">
       <div id="controls">
-        <button id="start-btn">Start Wave</button>
-        <button id="restart-btn" style="display: none;">Restart Game</button>
+        <button id="start-btn">Start Game</button>
+        <button id="restart-btn" style="display: none;">Play Again</button>
       </div>
       <div id="stats">
-        <span id="money">Money: $100</span>
-        <span id="lives">Lives: 10</span>
-        <span id="wave">Wave: 1</span>
+        <span id="score">Score: 0</span>
+        <span id="wave">Wave: 0</span>
+        <span id="combo" style="display: none;">Combo: x1</span>
       </div>
     </div>
 
     <div id="instructions">
-      <h3>How to Play</h3>
+      <h3>Controls</h3>
       <ul>
-        <li>Click <strong>Start Wave</strong> to begin spawning enemies</li>
-        <li>Click on grass tiles to place towers ($50 each)</li>
-        <li>Towers automatically shoot enemies in range</li>
-        <li>Stop enemies from reaching the end of the path!</li>
+        <li><strong>WASD</strong> or <strong>Arrow Keys</strong> - Move</li>
+        <li><strong>Left Click</strong> - Melee Attack (aim with mouse)</li>
+        <li><strong>Right Click</strong> or <strong>Space</strong> - Dash (invincible)</li>
+      </ul>
+      <h3>Tips</h3>
+      <ul>
+        <li>Chain kills quickly to build combos for bonus points</li>
+        <li>Use dash to escape when surrounded</li>
+        <li>Watch for <span class="enemy-fast">fast</span> and <span class="enemy-tank">tank</span> enemies in later waves</li>
       </ul>
     </div>
   </div>
