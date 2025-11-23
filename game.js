@@ -130,15 +130,26 @@ const CONFIG = {
 class SoundSystem {
   constructor() {
     this.enabled = true;
-    this.volume = 0.25;
+    this.volume = 0.3;
     this.ctx = null;
     this.initialized = false;
+    this.compressor = null;
+    this.reverbBuffer = null;
   }
 
   init() {
     if (this.initialized) return;
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // Master compressor for punch and consistency
+      this.compressor = this.ctx.createDynamicsCompressor();
+      this.compressor.threshold.value = -24;
+      this.compressor.knee.value = 12;
+      this.compressor.ratio.value = 8;
+      this.compressor.attack.value = 0.003;
+      this.compressor.release.value = 0.15;
+      this.compressor.connect(this.ctx.destination);
+      this.createReverbBuffer();
       this.initialized = true;
     } catch (e) {
       this.enabled = false;
@@ -149,17 +160,40 @@ class SoundSystem {
     if (this.ctx?.state === 'suspended') this.ctx.resume();
   }
 
+  createReverbBuffer() {
+    // Create impulse response for room reverb
+    const length = this.ctx.sampleRate * 0.8;
+    const buffer = this.ctx.createBuffer(2, length, this.ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const data = buffer.getChannelData(c);
+      for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (length * 0.15));
+      }
+    }
+    this.reverbBuffer = buffer;
+  }
+
+  createReverb(dryGain, wetAmount = 0.2) {
+    const convolver = this.ctx.createConvolver();
+    convolver.buffer = this.reverbBuffer;
+    const wetGain = this.ctx.createGain();
+    wetGain.gain.value = wetAmount;
+    dryGain.connect(convolver);
+    convolver.connect(wetGain);
+    wetGain.connect(this.compressor);
+    return convolver;
+  }
+
   play(type, x = 0, y = 0, distance = 0) {
     if (!this.enabled || !this.ctx) return;
-
     const vol = Math.max(0.1, this.volume * (1 - distance / 800));
 
     switch(type) {
-      case 'pistol': this.gunshot(400, 0.08, vol); break;
-      case 'smg': this.gunshot(500, 0.06, vol * 0.8); break;
-      case 'rifle': this.gunshot(300, 0.12, vol * 1.2); break;
-      case 'shotgun': this.gunshot(200, 0.15, vol * 1.4); break;
-      case 'silenced': this.silenced(vol * 0.5); break;
+      case 'pistol': this.pistolShot(vol); break;
+      case 'smg': this.smgShot(vol); break;
+      case 'rifle': this.rifleShot(vol); break;
+      case 'shotgun': this.shotgunBlast(vol); break;
+      case 'silenced': this.silencedShot(vol); break;
       case 'explosion': this.explosion(vol); break;
       case 'flashbang': this.flashbang(vol); break;
       case 'breach': this.breach(vol); break;
@@ -172,177 +206,646 @@ class SoundSystem {
     }
   }
 
-  gunshot(freq, duration, vol) {
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    const noise = this.createNoise(duration * 2);
-
-    osc.connect(gain);
-    noise.gainNode.connect(gain);
-    gain.connect(this.ctx.destination);
-
-    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + duration);
-    osc.type = 'sawtooth';
-
-    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-
-    osc.start();
-    osc.stop(this.ctx.currentTime + duration);
-    noise.source.start();
-    noise.source.stop(this.ctx.currentTime + duration * 2);
-  }
-
-  createNoise(duration) {
-    const bufferSize = this.ctx.sampleRate * duration;
+  // Create colored noise with filtering
+  createFilteredNoise(duration, lowFreq, highFreq, vol) {
+    const bufferSize = Math.ceil(this.ctx.sampleRate * duration);
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
 
     const source = this.ctx.createBufferSource();
-    const gainNode = this.ctx.createGain();
-    const filter = this.ctx.createBiquadFilter();
-
     source.buffer = buffer;
-    filter.type = 'lowpass';
-    filter.frequency.value = 2000;
 
-    source.connect(filter);
-    filter.connect(gainNode);
-    gainNode.gain.setValueAtTime(this.volume * 0.3, this.ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+    const lowpass = this.ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = highFreq;
+    lowpass.Q.value = 0.7;
 
-    return { source, gainNode };
-  }
+    const highpass = this.ctx.createBiquadFilter();
+    highpass.type = 'highpass';
+    highpass.frequency.value = lowFreq;
+    highpass.Q.value = 0.7;
 
-  silenced(vol) {
-    const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.frequency.value = 200;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.05);
+    gain.gain.value = vol;
+
+    source.connect(highpass);
+    highpass.connect(lowpass);
+    lowpass.connect(gain);
+
+    return { source, gain, lowpass, highpass };
   }
 
-  explosion(vol) {
-    const noise = this.createNoise(0.5);
-    noise.gainNode.gain.setValueAtTime(vol * 2, this.ctx.currentTime);
-    noise.gainNode.connect(this.ctx.destination);
-    noise.source.start();
-    noise.source.stop(this.ctx.currentTime + 0.5);
+  // Realistic pistol - sharp crack with mechanical action
+  pistolShot(vol) {
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 1.2;
+    master.connect(this.compressor);
+    this.createReverb(master, 0.15);
 
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.frequency.setValueAtTime(100, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(20, this.ctx.currentTime + 0.3);
-    gain.gain.setValueAtTime(vol * 1.5, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.3);
+    // Initial crack - very fast attack
+    const crack = this.createFilteredNoise(0.06, 800, 6000, 0.9);
+    crack.gain.gain.setValueAtTime(0.9, t);
+    crack.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    crack.gain.connect(master);
+    crack.source.start(t);
+    crack.source.stop(t + 0.06);
+
+    // Low thump - body of the shot
+    const thump = this.ctx.createOscillator();
+    const thumpGain = this.ctx.createGain();
+    const thumpFilter = this.ctx.createBiquadFilter();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(180, t);
+    thump.frequency.exponentialRampToValueAtTime(60, t + 0.08);
+    thumpFilter.type = 'lowpass';
+    thumpFilter.frequency.value = 300;
+    thumpGain.gain.setValueAtTime(0.8, t);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    thump.connect(thumpFilter);
+    thumpFilter.connect(thumpGain);
+    thumpGain.connect(master);
+    thump.start(t);
+    thump.stop(t + 0.12);
+
+    // Mechanical click
+    const click = this.ctx.createOscillator();
+    const clickGain = this.ctx.createGain();
+    click.type = 'square';
+    click.frequency.value = 2500;
+    clickGain.gain.setValueAtTime(0.15, t + 0.002);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.015);
+    click.connect(clickGain);
+    clickGain.connect(master);
+    click.start(t);
+    click.stop(t + 0.02);
   }
 
-  flashbang(vol) {
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.frequency.value = 3000;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.8);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.8);
+  // SMG - rapid, lighter sound
+  smgShot(vol) {
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 0.9;
+    master.connect(this.compressor);
+    this.createReverb(master, 0.1);
+
+    // Sharp crack - higher frequency
+    const crack = this.createFilteredNoise(0.04, 1200, 8000, 0.8);
+    crack.gain.gain.setValueAtTime(0.8, t);
+    crack.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.025);
+    crack.gain.connect(master);
+    crack.source.start(t);
+    crack.source.stop(t + 0.04);
+
+    // Quick thump
+    const thump = this.ctx.createOscillator();
+    const thumpGain = this.ctx.createGain();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(250, t);
+    thump.frequency.exponentialRampToValueAtTime(80, t + 0.04);
+    thumpGain.gain.setValueAtTime(0.5, t);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    thump.connect(thumpGain);
+    thumpGain.connect(master);
+    thump.start(t);
+    thump.stop(t + 0.06);
+
+    // Bolt noise
+    const bolt = this.createFilteredNoise(0.02, 2000, 6000, 0.3);
+    bolt.gain.gain.setValueAtTime(0.2, t + 0.01);
+    bolt.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+    bolt.gain.connect(master);
+    bolt.source.start(t + 0.01);
+    bolt.source.stop(t + 0.04);
   }
 
-  breach(vol) {
-    this.explosion(vol * 1.2);
+  // Rifle - heavy, powerful crack with echo
+  rifleShot(vol) {
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 1.5;
+    master.connect(this.compressor);
+    this.createReverb(master, 0.25);
+
+    // Supersonic crack - very sharp
+    const crack = this.createFilteredNoise(0.08, 600, 5000, 1.0);
+    crack.gain.gain.setValueAtTime(1.0, t);
+    crack.gain.gain.setValueAtTime(0.7, t + 0.005);
+    crack.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    crack.gain.connect(master);
+    crack.source.start(t);
+    crack.source.stop(t + 0.08);
+
+    // Heavy bass thump
+    const thump = this.ctx.createOscillator();
+    const thumpGain = this.ctx.createGain();
+    const thumpFilter = this.ctx.createBiquadFilter();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(120, t);
+    thump.frequency.exponentialRampToValueAtTime(35, t + 0.15);
+    thumpFilter.type = 'lowpass';
+    thumpFilter.frequency.value = 200;
+    thumpGain.gain.setValueAtTime(1.0, t);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    thump.connect(thumpFilter);
+    thumpFilter.connect(thumpGain);
+    thumpGain.connect(master);
+    thump.start(t);
+    thump.stop(t + 0.2);
+
+    // Secondary crack reflection
+    const echo = this.createFilteredNoise(0.05, 1000, 4000, 0.3);
+    echo.gain.gain.setValueAtTime(0.25, t + 0.03);
+    echo.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    echo.gain.connect(master);
+    echo.source.start(t + 0.03);
+    echo.source.stop(t + 0.08);
+
+    // Mechanical action
+    const action = this.createFilteredNoise(0.03, 3000, 8000, 0.2);
+    action.gain.gain.setValueAtTime(0.15, t + 0.05);
+    action.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    action.gain.connect(master);
+    action.source.start(t + 0.05);
+    action.source.stop(t + 0.09);
   }
 
-  reload(vol) {
+  // Shotgun - massive blast with multiple pellet sounds
+  shotgunBlast(vol) {
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 1.8;
+    master.connect(this.compressor);
+    this.createReverb(master, 0.3);
+
+    // Massive initial blast - wide frequency
+    const blast = this.createFilteredNoise(0.12, 200, 4000, 1.0);
+    blast.gain.gain.setValueAtTime(1.0, t);
+    blast.gain.gain.setValueAtTime(0.8, t + 0.01);
+    blast.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    blast.lowpass.frequency.setValueAtTime(4000, t);
+    blast.lowpass.frequency.exponentialRampToValueAtTime(800, t + 0.08);
+    blast.gain.connect(master);
+    blast.source.start(t);
+    blast.source.stop(t + 0.12);
+
+    // Deep bass boom
+    const boom = this.ctx.createOscillator();
+    const boomGain = this.ctx.createGain();
+    const boomFilter = this.ctx.createBiquadFilter();
+    boom.type = 'sine';
+    boom.frequency.setValueAtTime(80, t);
+    boom.frequency.exponentialRampToValueAtTime(25, t + 0.2);
+    boomFilter.type = 'lowpass';
+    boomFilter.frequency.value = 150;
+    boomGain.gain.setValueAtTime(1.2, t);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    boom.connect(boomFilter);
+    boomFilter.connect(boomGain);
+    boomGain.connect(master);
+    boom.start(t);
+    boom.stop(t + 0.3);
+
+    // Secondary thump
+    const thump2 = this.ctx.createOscillator();
+    const thump2Gain = this.ctx.createGain();
+    thump2.type = 'triangle';
+    thump2.frequency.setValueAtTime(150, t);
+    thump2.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+    thump2Gain.gain.setValueAtTime(0.6, t + 0.005);
+    thump2Gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    thump2.connect(thump2Gain);
+    thump2Gain.connect(master);
+    thump2.start(t);
+    thump2.stop(t + 0.18);
+
+    // Pump action sound (delayed)
     setTimeout(() => {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.frequency.value = 800;
-      gain.gain.setValueAtTime(vol * 0.3, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.05);
-    }, 50);
+      if (!this.ctx) return;
+      const pump = this.createFilteredNoise(0.08, 500, 3000, 0.4);
+      const pt = this.ctx.currentTime;
+      pump.gain.gain.setValueAtTime(0.3, pt);
+      pump.gain.gain.exponentialRampToValueAtTime(0.001, pt + 0.06);
+      pump.gain.connect(this.compressor);
+      pump.source.start(pt);
+      pump.source.stop(pt + 0.08);
+    }, 150);
   }
 
+  // Silenced - muffled thud
+  silencedShot(vol) {
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 0.5;
+    master.connect(this.compressor);
+
+    // Muffled thud
+    const thud = this.createFilteredNoise(0.08, 100, 800, 0.6);
+    thud.gain.gain.setValueAtTime(0.5, t);
+    thud.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    thud.gain.connect(master);
+    thud.source.start(t);
+    thud.source.stop(t + 0.08);
+
+    // Subtle mechanical sound
+    const mech = this.ctx.createOscillator();
+    const mechGain = this.ctx.createGain();
+    mech.type = 'sine';
+    mech.frequency.value = 400;
+    mechGain.gain.setValueAtTime(0.15, t);
+    mechGain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+    mech.connect(mechGain);
+    mechGain.connect(master);
+    mech.start(t);
+    mech.stop(t + 0.04);
+  }
+
+  // Realistic explosion - layered with debris
+  explosion(vol) {
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 2.0;
+    master.connect(this.compressor);
+    this.createReverb(master, 0.4);
+
+    // Initial shockwave - massive transient
+    const shock = this.createFilteredNoise(0.15, 30, 2000, 1.2);
+    shock.gain.gain.setValueAtTime(1.2, t);
+    shock.gain.gain.setValueAtTime(0.8, t + 0.02);
+    shock.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    shock.lowpass.frequency.setValueAtTime(2000, t);
+    shock.lowpass.frequency.exponentialRampToValueAtTime(200, t + 0.1);
+    shock.gain.connect(master);
+    shock.source.start(t);
+    shock.source.stop(t + 0.15);
+
+    // Deep sub-bass rumble
+    const sub = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    const subFilter = this.ctx.createBiquadFilter();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(60, t);
+    sub.frequency.exponentialRampToValueAtTime(15, t + 0.5);
+    subFilter.type = 'lowpass';
+    subFilter.frequency.value = 100;
+    subGain.gain.setValueAtTime(1.5, t);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+    sub.connect(subFilter);
+    subFilter.connect(subGain);
+    subGain.connect(master);
+    sub.start(t);
+    sub.stop(t + 0.7);
+
+    // Fire crackle - mid frequencies
+    const crackle = this.createFilteredNoise(0.4, 800, 4000, 0.5);
+    crackle.gain.gain.setValueAtTime(0.01, t);
+    crackle.gain.gain.linearRampToValueAtTime(0.4, t + 0.05);
+    crackle.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    crackle.gain.connect(master);
+    crackle.source.start(t);
+    crackle.source.stop(t + 0.4);
+
+    // High frequency sizzle
+    const sizzle = this.createFilteredNoise(0.3, 4000, 12000, 0.25);
+    sizzle.gain.gain.setValueAtTime(0.2, t + 0.02);
+    sizzle.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    sizzle.gain.connect(master);
+    sizzle.source.start(t + 0.02);
+    sizzle.source.stop(t + 0.3);
+
+    // Debris falling
+    for (let i = 0; i < 4; i++) {
+      const delay = 0.1 + Math.random() * 0.2;
+      const debris = this.createFilteredNoise(0.08, 200, 2000, 0.2);
+      debris.gain.gain.setValueAtTime(0.15, t + delay);
+      debris.gain.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.06);
+      debris.gain.connect(master);
+      debris.source.start(t + delay);
+      debris.source.stop(t + delay + 0.08);
+    }
+
+    // Secondary rumble
+    const rumble = this.ctx.createOscillator();
+    const rumbleGain = this.ctx.createGain();
+    rumble.type = 'triangle';
+    rumble.frequency.setValueAtTime(40, t + 0.05);
+    rumble.frequency.exponentialRampToValueAtTime(20, t + 0.4);
+    rumbleGain.gain.setValueAtTime(0.6, t + 0.05);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    rumble.connect(rumbleGain);
+    rumbleGain.connect(master);
+    rumble.start(t + 0.05);
+    rumble.stop(t + 0.5);
+  }
+
+  // Flashbang - sharp bang with ear ring
+  flashbang(vol) {
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 1.5;
+    master.connect(this.compressor);
+    this.createReverb(master, 0.5);
+
+    // Sharp initial bang
+    const bang = this.createFilteredNoise(0.1, 500, 8000, 1.0);
+    bang.gain.gain.setValueAtTime(1.0, t);
+    bang.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    bang.gain.connect(master);
+    bang.source.start(t);
+    bang.source.stop(t + 0.1);
+
+    // Ear ringing - high pitched
+    const ring = this.ctx.createOscillator();
+    const ringGain = this.ctx.createGain();
+    ring.type = 'sine';
+    ring.frequency.value = 4000 + Math.random() * 1000;
+    ringGain.gain.setValueAtTime(0.3, t + 0.02);
+    ringGain.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+    ring.connect(ringGain);
+    ringGain.connect(this.compressor);
+    ring.start(t + 0.02);
+    ring.stop(t + 1.3);
+
+    // Secondary ring
+    const ring2 = this.ctx.createOscillator();
+    const ring2Gain = this.ctx.createGain();
+    ring2.type = 'sine';
+    ring2.frequency.value = 3000 + Math.random() * 500;
+    ring2Gain.gain.setValueAtTime(0.15, t + 0.03);
+    ring2Gain.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+    ring2.connect(ring2Gain);
+    ring2Gain.connect(this.compressor);
+    ring2.start(t + 0.03);
+    ring2.stop(t + 0.9);
+  }
+
+  // Breach charge
+  breach(vol) {
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 2.2;
+    master.connect(this.compressor);
+    this.createReverb(master, 0.35);
+
+    // Focused explosive blast
+    const blast = this.createFilteredNoise(0.12, 100, 3000, 1.2);
+    blast.gain.gain.setValueAtTime(1.2, t);
+    blast.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    blast.gain.connect(master);
+    blast.source.start(t);
+    blast.source.stop(t + 0.12);
+
+    // Heavy thump
+    const thump = this.ctx.createOscillator();
+    const thumpGain = this.ctx.createGain();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(80, t);
+    thump.frequency.exponentialRampToValueAtTime(20, t + 0.3);
+    thumpGain.gain.setValueAtTime(1.3, t);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    thump.connect(thumpGain);
+    thumpGain.connect(master);
+    thump.start(t);
+    thump.stop(t + 0.4);
+
+    // Door/wall debris
+    const debris = this.createFilteredNoise(0.2, 300, 2500, 0.5);
+    debris.gain.gain.setValueAtTime(0.4, t + 0.03);
+    debris.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    debris.gain.connect(master);
+    debris.source.start(t + 0.03);
+    debris.source.stop(t + 0.2);
+  }
+
+  // Magazine reload
+  reload(vol) {
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 0.5;
+    master.connect(this.compressor);
+
+    // Magazine release click
+    const release = this.createFilteredNoise(0.03, 1500, 5000, 0.4);
+    release.gain.gain.setValueAtTime(0.3, t);
+    release.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.025);
+    release.gain.connect(master);
+    release.source.start(t);
+    release.source.stop(t + 0.03);
+
+    // Magazine insertion
+    setTimeout(() => {
+      if (!this.ctx) return;
+      const insert = this.createFilteredNoise(0.05, 800, 3000, 0.5);
+      const it = this.ctx.currentTime;
+      insert.gain.gain.setValueAtTime(0.35, it);
+      insert.gain.gain.exponentialRampToValueAtTime(0.001, it + 0.04);
+      insert.gain.connect(this.compressor);
+      insert.source.start(it);
+      insert.source.stop(it + 0.05);
+
+      // Click into place
+      const click = this.ctx.createOscillator();
+      const clickGain = this.ctx.createGain();
+      click.type = 'square';
+      click.frequency.value = 1800;
+      clickGain.gain.setValueAtTime(0.2, it + 0.02);
+      clickGain.gain.exponentialRampToValueAtTime(0.001, it + 0.035);
+      click.connect(clickGain);
+      clickGain.connect(this.compressor);
+      click.start(it + 0.02);
+      click.stop(it + 0.04);
+    }, 80);
+
+    // Chamber a round
+    setTimeout(() => {
+      if (!this.ctx) return;
+      const chamber = this.createFilteredNoise(0.06, 1000, 4000, 0.4);
+      const ct = this.ctx.currentTime;
+      chamber.gain.gain.setValueAtTime(0.3, ct);
+      chamber.gain.gain.exponentialRampToValueAtTime(0.001, ct + 0.05);
+      chamber.gain.connect(this.compressor);
+      chamber.source.start(ct);
+      chamber.source.stop(ct + 0.06);
+    }, 180);
+  }
+
+  // Empty magazine click
   empty(vol) {
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.frequency.value = 1200;
-    gain.gain.setValueAtTime(vol * 0.2, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.02);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.02);
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 0.4;
+    master.connect(this.compressor);
+
+    // Dry click
+    const click = this.ctx.createOscillator();
+    const clickGain = this.ctx.createGain();
+    const clickFilter = this.ctx.createBiquadFilter();
+    click.type = 'square';
+    click.frequency.value = 2000;
+    clickFilter.type = 'bandpass';
+    clickFilter.frequency.value = 1500;
+    clickFilter.Q.value = 2;
+    clickGain.gain.setValueAtTime(0.35, t);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+    click.connect(clickFilter);
+    clickFilter.connect(clickGain);
+    clickGain.connect(master);
+    click.start(t);
+    click.stop(t + 0.025);
+
+    // Metal resonance
+    const metal = this.ctx.createOscillator();
+    const metalGain = this.ctx.createGain();
+    metal.type = 'sine';
+    metal.frequency.value = 3500;
+    metalGain.gain.setValueAtTime(0.1, t + 0.005);
+    metalGain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    metal.connect(metalGain);
+    metalGain.connect(master);
+    metal.start(t + 0.005);
+    metal.stop(t + 0.05);
   }
 
+  // Footstep
   footstep(vol) {
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.frequency.value = 100 + Math.random() * 50;
-    osc.type = 'triangle';
-    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.05);
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol;
+    master.connect(this.compressor);
+
+    // Thud
+    const thud = this.createFilteredNoise(0.08, 60, 400, 0.6);
+    thud.gain.gain.setValueAtTime(0.5, t);
+    thud.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    thud.gain.connect(master);
+    thud.source.start(t);
+    thud.source.stop(t + 0.08);
+
+    // Surface scrape
+    const scrape = this.createFilteredNoise(0.04, 800, 2500, 0.2);
+    scrape.gain.gain.setValueAtTime(0.15 * Math.random(), t + 0.01);
+    scrape.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    scrape.gain.connect(master);
+    scrape.source.start(t + 0.01);
+    scrape.source.stop(t + 0.05);
   }
 
+  // Bullet hit/impact
   hit(vol) {
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.frequency.value = 150;
-    osc.type = 'sawtooth';
-    gain.gain.setValueAtTime(vol * 0.5, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.1);
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 0.8;
+    master.connect(this.compressor);
+
+    // Impact thud
+    const impact = this.createFilteredNoise(0.1, 100, 1500, 0.7);
+    impact.gain.gain.setValueAtTime(0.6, t);
+    impact.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    impact.gain.connect(master);
+    impact.source.start(t);
+    impact.source.stop(t + 0.1);
+
+    // Flesh/material sound
+    const flesh = this.ctx.createOscillator();
+    const fleshGain = this.ctx.createGain();
+    flesh.type = 'sine';
+    flesh.frequency.setValueAtTime(200, t);
+    flesh.frequency.exponentialRampToValueAtTime(80, t + 0.06);
+    fleshGain.gain.setValueAtTime(0.4, t);
+    fleshGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    flesh.connect(fleshGain);
+    fleshGain.connect(master);
+    flesh.start(t);
+    flesh.stop(t + 0.1);
   }
 
+  // Bullet ricochet
   ricochet(vol) {
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.frequency.setValueAtTime(2000, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(500, this.ctx.currentTime + 0.15);
-    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.15);
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol;
+    master.connect(this.compressor);
+    this.createReverb(master, 0.25);
+
+    // Initial ping
+    const ping = this.ctx.createOscillator();
+    const pingGain = this.ctx.createGain();
+    ping.type = 'sine';
+    ping.frequency.setValueAtTime(3500 + Math.random() * 1500, t);
+    ping.frequency.exponentialRampToValueAtTime(800 + Math.random() * 400, t + 0.2);
+    pingGain.gain.setValueAtTime(0.5, t);
+    pingGain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    ping.connect(pingGain);
+    pingGain.connect(master);
+    ping.start(t);
+    ping.stop(t + 0.2);
+
+    // Metal impact
+    const metal = this.createFilteredNoise(0.04, 2000, 6000, 0.4);
+    metal.gain.gain.setValueAtTime(0.35, t);
+    metal.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+    metal.gain.connect(master);
+    metal.source.start(t);
+    metal.source.stop(t + 0.04);
+
+    // Whizz away
+    const whizz = this.ctx.createOscillator();
+    const whizzGain = this.ctx.createGain();
+    whizz.type = 'sawtooth';
+    whizz.frequency.setValueAtTime(2000, t + 0.02);
+    whizz.frequency.exponentialRampToValueAtTime(400, t + 0.15);
+    whizzGain.gain.setValueAtTime(0.15, t + 0.02);
+    whizzGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    whizz.connect(whizzGain);
+    whizzGain.connect(master);
+    whizz.start(t + 0.02);
+    whizz.stop(t + 0.15);
   }
 
+  // Glass breaking
   glass(vol) {
-    for (let i = 0; i < 3; i++) {
-      setTimeout(() => {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.frequency.value = 2000 + Math.random() * 2000;
-        gain.gain.setValueAtTime(vol * 0.2, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.03);
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.03);
-      }, i * 20);
+    const t = this.ctx.currentTime;
+    const master = this.ctx.createGain();
+    master.gain.value = vol * 0.7;
+    master.connect(this.compressor);
+    this.createReverb(master, 0.2);
+
+    // Initial crack
+    const crack = this.createFilteredNoise(0.08, 2000, 10000, 0.8);
+    crack.gain.gain.setValueAtTime(0.7, t);
+    crack.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    crack.gain.connect(master);
+    crack.source.start(t);
+    crack.source.stop(t + 0.08);
+
+    // Multiple shards falling
+    for (let i = 0; i < 6; i++) {
+      const delay = Math.random() * 0.15;
+      const freq = 3000 + Math.random() * 4000;
+
+      const shard = this.ctx.createOscillator();
+      const shardGain = this.ctx.createGain();
+      shard.type = 'sine';
+      shard.frequency.setValueAtTime(freq, t + delay);
+      shard.frequency.exponentialRampToValueAtTime(freq * 0.7, t + delay + 0.05);
+      shardGain.gain.setValueAtTime(0.2, t + delay);
+      shardGain.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.04);
+      shard.connect(shardGain);
+      shardGain.connect(master);
+      shard.start(t + delay);
+      shard.stop(t + delay + 0.06);
+    }
+
+    // Tinkling aftermath
+    for (let i = 0; i < 4; i++) {
+      const delay = 0.1 + Math.random() * 0.2;
+      const tinkle = this.createFilteredNoise(0.03, 4000, 12000, 0.15);
+      tinkle.gain.gain.setValueAtTime(0.12, t + delay);
+      tinkle.gain.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.025);
+      tinkle.gain.connect(master);
+      tinkle.source.start(t + delay);
+      tinkle.source.stop(t + delay + 0.03);
     }
   }
 
