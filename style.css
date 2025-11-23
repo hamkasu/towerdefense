@@ -1,4 +1,4 @@
-/* Close Quarter Combat Game Styles */
+/* Close Quarter Combat - Team Arena Styles */
 
 * {
   box-sizing: border-box;
@@ -27,11 +27,12 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   text-align: center;
   border: 1px solid rgba(79, 195, 247, 0.2);
+  max-width: 960px;
 }
 
 h1 {
-  margin-bottom: 16px;
-  font-size: 2.2rem;
+  margin-bottom: 4px;
+  font-size: 2.4rem;
   color: #4fc3f7;
   text-shadow:
     0 0 10px rgba(79, 195, 247, 0.5),
@@ -40,9 +41,275 @@ h1 {
   text-transform: uppercase;
 }
 
+.subtitle {
+  color: #888;
+  font-size: 1rem;
+  margin-bottom: 20px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+}
+
+/* =============================================================================
+   LOBBY SCREEN
+   ============================================================================= */
+
+#lobby-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.lobby-section {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.lobby-section h3 {
+  color: #4fc3f7;
+  margin-bottom: 15px;
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.input-group {
+  margin-bottom: 15px;
+  text-align: left;
+}
+
+.input-group:last-child {
+  margin-bottom: 0;
+}
+
+.input-group label {
+  display: block;
+  color: #aaa;
+  font-size: 0.85rem;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.input-group input,
+.input-group select {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 1rem;
+  border: 2px solid rgba(79, 195, 247, 0.3);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  transition: all 0.2s ease;
+}
+
+.input-group input:focus,
+.input-group select:focus {
+  outline: none;
+  border-color: #4fc3f7;
+  box-shadow: 0 0 10px rgba(79, 195, 247, 0.3);
+}
+
+.input-group input::placeholder {
+  color: #666;
+}
+
+.lobby-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  color: #666;
+  font-size: 0.85rem;
+  margin: 5px 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.divider span {
+  padding: 0 15px;
+}
+
+.join-room-group {
+  display: flex;
+  gap: 10px;
+}
+
+.join-room-group input {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 1rem;
+  border: 2px solid rgba(79, 195, 247, 0.3);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.join-room-group input:focus {
+  outline: none;
+  border-color: #4fc3f7;
+}
+
+.room-info {
+  background: rgba(79, 195, 247, 0.1);
+}
+
+.room-info h3 {
+  font-size: 1.3rem;
+}
+
+.room-info #current-room-code {
+  color: #fff;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px 12px;
+  border-radius: 6px;
+  letter-spacing: 3px;
+}
+
+.connection-status {
+  font-size: 0.85rem;
+  color: #888;
+  margin-bottom: 10px;
+}
+
+.status-online {
+  color: #4caf50;
+  font-weight: 600;
+}
+
+.status-offline {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+
+#players-list {
+  list-style: none;
+  text-align: left;
+}
+
+#players-list li {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  color: #ccc;
+}
+
+#players-list li.local-player {
+  color: #4fc3f7;
+  font-weight: 600;
+  border: 1px solid rgba(79, 195, 247, 0.3);
+}
+
+.instructions-mini {
+  background: rgba(79, 195, 247, 0.08);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.instructions-mini strong {
+  color: #4fc3f7;
+}
+
+/* =============================================================================
+   BUTTONS
+   ============================================================================= */
+
+button {
+  padding: 14px 28px;
+  font-size: 1rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #4fc3f7 0%, #29b6f6 100%);
+  color: #0d0d1a;
+  box-shadow: 0 4px 15px rgba(79, 195, 247, 0.4);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #81d4fa 0%, #4fc3f7 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(79, 195, 247, 0.5);
+}
+
+.btn-secondary {
+  background: rgba(79, 195, 247, 0.2);
+  color: #4fc3f7;
+  border: 2px solid rgba(79, 195, 247, 0.4);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(79, 195, 247, 0.3);
+  border-color: #4fc3f7;
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ff8a8a 0%, #ff6b6b 100%);
+  transform: translateY(-2px);
+}
+
+.btn-small {
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: #aaa;
+}
+
+.btn-small:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* =============================================================================
+   GAME SCREEN
+   ============================================================================= */
+
+#game-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 #game-canvas {
   display: block;
-  margin: 0 auto;
   background: #1a1a2e;
   border: 3px solid #4fc3f7;
   border-radius: 8px;
@@ -57,61 +324,21 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
+  max-width: 900px;
 }
 
 #controls {
   display: flex;
   justify-content: center;
   gap: 12px;
-}
-
-button {
-  padding: 14px 28px;
-  font-size: 1.1rem;
-  font-weight: 700;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-#start-btn {
-  background: linear-gradient(135deg, #4fc3f7 0%, #29b6f6 100%);
-  color: #0d0d1a;
-  box-shadow: 0 4px 15px rgba(79, 195, 247, 0.4);
-}
-
-#start-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #81d4fa 0%, #4fc3f7 100%);
-  transform: translateY(-3px);
-  box-shadow: 0 6px 20px rgba(79, 195, 247, 0.6);
-}
-
-#start-btn:disabled {
-  background: #444;
-  color: #777;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-#restart-btn {
-  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
-  color: white;
-  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
-}
-
-#restart-btn:hover {
-  background: linear-gradient(135deg, #ff8a8a 0%, #ff6b6b 100%);
-  transform: translateY(-3px);
-  box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
+  flex-wrap: wrap;
 }
 
 #stats {
   display: flex;
   justify-content: center;
-  gap: 20px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
@@ -120,14 +347,19 @@ button {
   padding: 10px 20px;
   border-radius: 8px;
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  min-width: 120px;
+  min-width: 100px;
 }
 
 #score {
   color: #ffd700;
   text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+}
+
+#team-score {
+  color: #4fc3f7;
+  text-shadow: 0 0 10px rgba(79, 195, 247, 0.3);
 }
 
 #wave {
@@ -142,13 +374,13 @@ button {
 }
 
 @keyframes pulse {
-  from {
-    transform: scale(1);
-  }
-  to {
-    transform: scale(1.05);
-  }
+  from { transform: scale(1); }
+  to { transform: scale(1.05); }
 }
+
+/* =============================================================================
+   INSTRUCTIONS
+   ============================================================================= */
 
 #instructions {
   margin-top: 20px;
@@ -157,14 +389,15 @@ button {
   padding: 18px 24px;
   border-radius: 10px;
   text-align: left;
-  max-width: 800px;
+  width: 100%;
+  max-width: 900px;
 }
 
 #instructions h3 {
   color: #4fc3f7;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   margin-top: 12px;
-  font-size: 1rem;
+  font-size: 0.95rem;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -178,15 +411,15 @@ button {
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 #instructions li {
-  padding: 6px 0;
-  padding-left: 20px;
+  padding: 4px 0;
+  padding-left: 18px;
   position: relative;
-  color: #b0b0b0;
-  font-size: 0.9rem;
+  color: #999;
+  font-size: 0.85rem;
 }
 
 #instructions li::before {
@@ -202,27 +435,20 @@ button {
   background: rgba(79, 195, 247, 0.15);
   padding: 2px 6px;
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
-.enemy-fast {
-  color: #fffa65;
-  font-weight: 600;
-}
+/* =============================================================================
+   RESPONSIVE
+   ============================================================================= */
 
-.enemy-tank {
-  color: #a55eea;
-  font-weight: 600;
-}
-
-/* Responsive design */
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   #game-container {
     padding: 16px;
   }
 
   h1 {
-    font-size: 1.6rem;
+    font-size: 1.8rem;
   }
 
   #game-canvas {
@@ -231,13 +457,13 @@ button {
   }
 
   #stats {
-    gap: 10px;
+    gap: 8px;
   }
 
   #stats span {
-    padding: 8px 14px;
-    font-size: 0.95rem;
-    min-width: 100px;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    min-width: 80px;
   }
 
   #instructions ul {
@@ -246,11 +472,21 @@ button {
 
   button {
     padding: 12px 20px;
-    font-size: 1rem;
+    font-size: 0.9rem;
   }
 }
 
-/* Game cursor states */
-#game-canvas:active {
-  cursor: crosshair;
+@media (max-width: 500px) {
+  .join-room-group {
+    flex-direction: column;
+  }
+
+  #controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #controls button {
+    width: 100%;
+  }
 }
