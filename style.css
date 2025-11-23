@@ -1,4 +1,4 @@
-/* Tower Defense Game Styles */
+/* Close Quarter Combat Game Styles */
 
 * {
   box-sizing: border-box;
@@ -7,7 +7,7 @@
 }
 
 body {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: linear-gradient(135deg, #0d0d1a 0%, #1a1a2e 50%, #16213e 100%);
   color: #f0f0f0;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   min-height: 100vh;
@@ -18,27 +18,38 @@ body {
 }
 
 #game-container {
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.7);
   padding: 24px;
   border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    0 0 60px rgba(79, 195, 247, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   text-align: center;
+  border: 1px solid rgba(79, 195, 247, 0.2);
 }
 
 h1 {
   margin-bottom: 16px;
-  font-size: 2rem;
+  font-size: 2.2rem;
   color: #4fc3f7;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  text-shadow:
+    0 0 10px rgba(79, 195, 247, 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.5);
+  letter-spacing: 2px;
+  text-transform: uppercase;
 }
 
 #game-canvas {
   display: block;
   margin: 0 auto;
-  background: #1a1a1a;
+  background: #1a1a2e;
   border: 3px solid #4fc3f7;
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(79, 195, 247, 0.2);
+  box-shadow:
+    0 4px 20px rgba(79, 195, 247, 0.3),
+    inset 0 0 60px rgba(0, 0, 0, 0.5);
+  cursor: crosshair;
 }
 
 #ui {
@@ -55,92 +66,123 @@ h1 {
 }
 
 button {
-  padding: 12px 24px;
-  font-size: 1rem;
-  font-weight: 600;
+  padding: 14px 28px;
+  font-size: 1.1rem;
+  font-weight: 700;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 #start-btn {
-  background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
-  color: white;
+  background: linear-gradient(135deg, #4fc3f7 0%, #29b6f6 100%);
+  color: #0d0d1a;
+  box-shadow: 0 4px 15px rgba(79, 195, 247, 0.4);
 }
 
 #start-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #5cbf60 0%, #4fb853 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+  background: linear-gradient(135deg, #81d4fa 0%, #4fc3f7 100%);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(79, 195, 247, 0.6);
 }
 
 #start-btn:disabled {
-  background: #555;
-  color: #888;
+  background: #444;
+  color: #777;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 #restart-btn {
-  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
   color: white;
+  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
 }
 
 #restart-btn:hover {
-  background: linear-gradient(135deg, #ff5252 0%, #e53935 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+  background: linear-gradient(135deg, #ff8a8a 0%, #ff6b6b 100%);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
 }
 
 #stats {
   display: flex;
   justify-content: center;
-  gap: 24px;
+  gap: 20px;
   flex-wrap: wrap;
 }
 
 #stats span {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-weight: 500;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  min-width: 120px;
 }
 
-#money {
+#score {
   color: #ffd700;
-}
-
-#lives {
-  color: #ff6b6b;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
 }
 
 #wave {
   color: #69db7c;
+  text-shadow: 0 0 10px rgba(105, 219, 124, 0.3);
+}
+
+#combo {
+  color: #ff6b6b;
+  text-shadow: 0 0 10px rgba(255, 107, 107, 0.3);
+  animation: pulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.05);
+  }
 }
 
 #instructions {
   margin-top: 20px;
-  background: rgba(79, 195, 247, 0.1);
-  border: 1px solid rgba(79, 195, 247, 0.3);
-  padding: 16px 20px;
-  border-radius: 8px;
+  background: rgba(79, 195, 247, 0.08);
+  border: 1px solid rgba(79, 195, 247, 0.25);
+  padding: 18px 24px;
+  border-radius: 10px;
   text-align: left;
-  max-width: 640px;
+  max-width: 800px;
 }
 
 #instructions h3 {
   color: #4fc3f7;
-  margin-bottom: 10px;
-  font-size: 1.1rem;
+  margin-bottom: 12px;
+  margin-top: 12px;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+#instructions h3:first-child {
+  margin-top: 0;
 }
 
 #instructions ul {
   list-style: none;
   padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
 }
 
 #instructions li {
-  padding: 4px 0;
+  padding: 6px 0;
   padding-left: 20px;
   position: relative;
   color: #b0b0b0;
@@ -152,28 +194,63 @@ button {
   position: absolute;
   left: 0;
   color: #4fc3f7;
+  font-weight: bold;
 }
 
 #instructions strong {
-  color: #f0f0f0;
+  color: #ffffff;
+  background: rgba(79, 195, 247, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.enemy-fast {
+  color: #fffa65;
+  font-weight: 600;
+}
+
+.enemy-tank {
+  color: #a55eea;
+  font-weight: 600;
 }
 
 /* Responsive design */
-@media (max-width: 700px) {
+@media (max-width: 860px) {
   #game-container {
     padding: 16px;
   }
 
   h1 {
-    font-size: 1.5rem;
+    font-size: 1.6rem;
+  }
+
+  #game-canvas {
+    max-width: 100%;
+    height: auto;
   }
 
   #stats {
-    gap: 12px;
+    gap: 10px;
   }
 
   #stats span {
-    padding: 6px 12px;
-    font-size: 0.9rem;
+    padding: 8px 14px;
+    font-size: 0.95rem;
+    min-width: 100px;
   }
+
+  #instructions ul {
+    grid-template-columns: 1fr;
+  }
+
+  button {
+    padding: 12px 20px;
+    font-size: 1rem;
+  }
+}
+
+/* Game cursor states */
+#game-canvas:active {
+  cursor: crosshair;
 }
