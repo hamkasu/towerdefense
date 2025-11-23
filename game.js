@@ -2108,6 +2108,14 @@ class Level {
   }
 
   isSolid(x, y, ignoreDestroyed = true) {
+    // First check if point is inside an open/destroyed door - if so, it's passable
+    for (const door of this.doors) {
+      if (door.destroyed || door.open) {
+        if (utils.pointInRect(x, y, door.x, door.y, door.w, door.h)) {
+          return null; // Open/destroyed door = passable, even if wall overlaps
+        }
+      }
+    }
     for (const wall of this.walls) {
       if (ignoreDestroyed && wall.destroyed) continue;
       if (utils.pointInRect(x, y, wall.x, wall.y, wall.w, wall.h)) {
