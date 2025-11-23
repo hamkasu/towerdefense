@@ -2366,6 +2366,9 @@ class Player {
     this.moveLeft = false;
     this.moveRight = false;
     this.isSprinting = false;
+    // Click-to-move target
+    this.moveTargetX = null;
+    this.moveTargetY = null;
 
     // Weapons
     this.weapons = [
@@ -2451,10 +2454,27 @@ class Player {
     this.vx = 0;
     this.vy = 0;
 
+    // WASD movement
     if (this.moveUp) this.vy -= 1;
     if (this.moveDown) this.vy += 1;
     if (this.moveLeft) this.vx -= 1;
     if (this.moveRight) this.vx += 1;
+
+    // Click-to-move (if no WASD input and target exists)
+    if (this.vx === 0 && this.vy === 0 && this.moveTargetX !== null && this.moveTargetY !== null) {
+      const dx = this.moveTargetX - this.x;
+      const dy = this.moveTargetY - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > 5) {
+        this.vx = dx / dist;
+        this.vy = dy / dist;
+      } else {
+        // Reached target
+        this.moveTargetX = null;
+        this.moveTargetY = null;
+      }
+    }
 
     if (this.vx !== 0 || this.vy !== 0) {
       const norm = utils.normalize(this.vx, this.vy);
@@ -3034,6 +3054,7 @@ class Game {
     this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
     this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.canvas.addEventListener('wheel', (e) => this.handleMouseWheel(e));
 
     document.getElementById('start-btn')?.addEventListener('click', () => this.startMission());
     document.getElementById('sound-toggle')?.addEventListener('click', () => {
@@ -3697,7 +3718,11 @@ class Game {
     if (!this.isRunning || this.player.isDead) return;
 
     if (e.button === 0) {
-      // Left click - fire
+      // Left click - move to position
+      this.player.moveTargetX = this.mouseX;
+      this.player.moveTargetY = this.mouseY;
+    } else if (e.button === 2) {
+      // Right click - fire
       this.player.isFiring = true;
       const result = this.player.fire();
       if (result) {
@@ -3705,17 +3730,27 @@ class Game {
         this.shellCasings.push(result.casing);
         this.notifyEnemiesOfSound(this.player.x, this.player.y, 1);
       }
-    } else if (e.button === 2) {
-      // Right click - ADS
-      this.player.isADS = true;
     }
   }
 
   handleMouseUp(e) {
-    if (e.button === 0) {
+    if (e.button === 2) {
+      // Right click release - stop firing
       this.player.isFiring = false;
-    } else if (e.button === 2) {
-      this.player.isADS = false;
+    }
+  }
+
+  handleMouseWheel(e) {
+    if (!this.isRunning || this.player.isDead) return;
+    e.preventDefault();
+
+    // Scroll up/down to change weapons
+    if (e.deltaY < 0) {
+      // Scroll up - previous weapon
+      this.player.currentWeapon = (this.player.currentWeapon - 1 + this.player.weapons.length) % this.player.weapons.length;
+    } else if (e.deltaY > 0) {
+      // Scroll down - next weapon
+      this.player.currentWeapon = (this.player.currentWeapon + 1) % this.player.weapons.length;
     }
   }
 }
