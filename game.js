@@ -3873,6 +3873,20 @@ class Game {
 
     // Initialize map description
     this.updateMapDescription();
+
+    // Load game button (main menu)
+    document.getElementById('load-game-btn')?.addEventListener('click', () => {
+      this.showSaveLoadMenu('load');
+    });
+
+    // Pause menu buttons
+    document.getElementById('resume-btn')?.addEventListener('click', () => this.resumeGame());
+    document.getElementById('save-game-btn')?.addEventListener('click', () => this.showSaveLoadMenu('save'));
+    document.getElementById('load-game-pause-btn')?.addEventListener('click', () => this.showSaveLoadMenu('load'));
+    document.getElementById('quit-to-menu-btn')?.addEventListener('click', () => this.quitToMenu());
+
+    // Save/Load menu close button
+    document.getElementById('save-load-close-btn')?.addEventListener('click', () => this.hideSaveLoadMenu());
   }
 
   bindMultiplayerEvents() {
@@ -4310,7 +4324,10 @@ class Game {
   gameLoop() {
     if (!this.isRunning) return;
 
-    this.update();
+    // Only update game state if not paused
+    if (!this.isPaused) {
+      this.update();
+    }
     this.draw();
 
     requestAnimationFrame(() => this.gameLoop());
@@ -4894,7 +4911,47 @@ class Game {
   }
 
   handleKeyDown(e) {
-    if (!this.isRunning) return;
+    // Handle ESC for pause menu (even when paused)
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      // Close save/load menu if open
+      const saveLoadMenu = document.getElementById('save-load-menu');
+      if (saveLoadMenu && saveLoadMenu.style.display !== 'none') {
+        this.hideSaveLoadMenu();
+        return;
+      }
+      // Toggle pause menu
+      if (this.isRunning && !this.isMultiplayer) {
+        if (this.isPaused) {
+          this.resumeGame();
+        } else {
+          this.showPauseMenu();
+        }
+      }
+      return;
+    }
+
+    // Handle F5 for quicksave (only in single player)
+    if (e.key === 'F5' && this.isRunning && !this.isMultiplayer && !this.isPaused) {
+      e.preventDefault();
+      const result = this.saveCurrentGame('Quicksave', 'quicksave');
+      if (result.success) {
+        this.showQuickMessage('Game saved!');
+      }
+      return;
+    }
+
+    // Handle F9 for quickload
+    if (e.key === 'F9') {
+      e.preventDefault();
+      const result = this.loadSavedGame('quicksave');
+      if (!result.success) {
+        this.showQuickMessage('No quicksave found');
+      }
+      return;
+    }
+
+    if (!this.isRunning || this.isPaused) return;
 
     const key = e.key.toLowerCase();
 
@@ -5023,7 +5080,566 @@ class Game {
       this.player.currentWeapon = (this.player.currentWeapon + 1) % this.player.weapons.length;
     }
   }
+
+  // =========================================================================
+  // SAVE/LOAD SYSTEM
+  // =========================================================================
+
+  // Serialize player state
+  serializePlayer(player) {
+    return {
+      id: player.id,
+      x: player.x,
+      y: player.y,
+      angle: player.angle,
+      hp: player.hp,
+      maxHp: player.maxHp,
+      isDead: player.isDead,
+      bleeding: player.bleeding,
+      stance: player.stance,
+      lean: player.lean,
+      isADS: player.isADS,
+      weapons: player.weapons.map(w => ({
+        type: w.type,
+        ammo: w.ammo,
+        reserveAmmo: w.reserveAmmo
+      })),
+      currentWeapon: player.currentWeapon,
+      grenades: { ...player.grenades },
+      selectedGrenade: player.selectedGrenade,
+      isLocal: player.isLocal,
+      isAI: player.isAI,
+      name: player.name
+    };
+  }
+
+  // Deserialize player state
+  deserializePlayer(data, player) {
+    player.x = data.x;
+    player.y = data.y;
+    player.angle = data.angle;
+    player.hp = data.hp;
+    player.maxHp = data.maxHp;
+    player.isDead = data.isDead;
+    player.bleeding = data.bleeding || 0;
+    player.stance = data.stance;
+    player.lean = data.lean || 0;
+    player.targetLean = data.lean || 0;
+    player.isADS = data.isADS || false;
+    player.currentWeapon = data.currentWeapon;
+    player.grenades = { ...data.grenades };
+    player.selectedGrenade = data.selectedGrenade || 'frag';
+
+    // Restore weapons
+    data.weapons.forEach((w, i) => {
+      if (player.weapons[i]) {
+        player.weapons[i].ammo = w.ammo;
+        player.weapons[i].reserveAmmo = w.reserveAmmo;
+      }
+    });
+  }
+
+  // Serialize enemy state
+  serializeEnemy(enemy) {
+    return {
+      id: enemy.id,
+      x: enemy.x,
+      y: enemy.y,
+      angle: enemy.angle,
+      hp: enemy.hp,
+      maxHp: enemy.maxHp,
+      isDead: enemy.isDead,
+      state: enemy.state,
+      weapon: {
+        type: enemy.weapon.type,
+        ammo: enemy.weapon.ammo,
+        reserveAmmo: enemy.weapon.reserveAmmo
+      },
+      patrolPoints: enemy.patrolPoints,
+      patrolIndex: enemy.patrolIndex,
+      lastKnownTargetPos: enemy.lastKnownTargetPos
+    };
+  }
+
+  // Deserialize enemy state
+  deserializeEnemy(data, enemy) {
+    enemy.x = data.x;
+    enemy.y = data.y;
+    enemy.angle = data.angle;
+    enemy.hp = data.hp;
+    enemy.maxHp = data.maxHp;
+    enemy.isDead = data.isDead;
+    enemy.state = data.state || 'patrol';
+    enemy.weapon.ammo = data.weapon.ammo;
+    enemy.weapon.reserveAmmo = data.weapon.reserveAmmo;
+    enemy.patrolPoints = data.patrolPoints || [];
+    enemy.patrolIndex = data.patrolIndex || 0;
+    enemy.lastKnownTargetPos = data.lastKnownTargetPos;
+  }
+
+  // Serialize level state (doors)
+  serializeLevel() {
+    return {
+      mapType: this.level.mapType,
+      mapName: this.level.mapName,
+      doors: this.level.doors.map(d => ({
+        x: d.x,
+        y: d.y,
+        isOpen: d.isOpen
+      }))
+    };
+  }
+
+  // Get full game state for saving
+  getGameStateForSave() {
+    return {
+      mapType: this.level.mapType,
+      mapName: this.level.mapName,
+      cameraX: this.cameraX,
+      cameraY: this.cameraY,
+      currentFormation: this.currentFormation,
+      missionComplete: this.missionComplete,
+      missionFailed: this.missionFailed,
+      player: this.serializePlayer(this.player),
+      teammates: this.teammates.filter(t => t !== this.player).map(t => this.serializePlayer(t)),
+      enemies: this.enemies.map(e => this.serializeEnemy(e)),
+      level: this.serializeLevel()
+    };
+  }
+
+  // Save current game
+  saveCurrentGame(saveName = null, slotId = null) {
+    if (!this.isRunning || this.isMultiplayer) {
+      return { success: false, error: 'Cannot save in current state' };
+    }
+
+    const gameState = this.getGameStateForSave();
+    return saveManager.saveGame(gameState, slotId, saveName);
+  }
+
+  // Load a saved game
+  loadSavedGame(saveId) {
+    const result = saveManager.loadGame(saveId);
+    if (!result.success) {
+      return result;
+    }
+
+    const data = result.data;
+
+    // Initialize sound
+    sound.init();
+    sound.resume();
+
+    // Ensure single player mode
+    this.isMultiplayer = false;
+    this.remotePlayers.clear();
+    this.playerIdToEntity.clear();
+
+    // Show game screen
+    document.getElementById('menu-screen').style.display = 'none';
+    document.getElementById('game-screen').style.display = 'block';
+    document.getElementById('hud').style.display = 'block';
+    this.hideSaveLoadMenu();
+
+    // Create level with saved map type
+    this.selectedMap = data.mapType;
+    this.level = new Level(data.mapType);
+
+    // Restore door states
+    if (data.level && data.level.doors) {
+      data.level.doors.forEach((savedDoor, i) => {
+        if (this.level.doors[i]) {
+          this.level.doors[i].isOpen = savedDoor.isOpen;
+        }
+      });
+    }
+
+    // Restore camera
+    this.cameraX = data.cameraX || 0;
+    this.cameraY = data.cameraY || 0;
+    this.currentFormation = data.currentFormation || 'closeCombat';
+
+    // Create and restore player
+    this.player = new Player(data.player.x, data.player.y, true);
+    this.deserializePlayer(data.player, this.player);
+
+    // Create and restore teammates
+    this.teammates = [this.player];
+    if (data.teammates) {
+      data.teammates.forEach(tData => {
+        const teammate = new Player(tData.x, tData.y, false);
+        teammate.isAI = tData.isAI !== false;
+        teammate.name = tData.name;
+        this.deserializePlayer(tData, teammate);
+        this.teammates.push(teammate);
+      });
+    }
+
+    // Create enemies at saved positions
+    this.enemies = [];
+    if (data.enemies) {
+      data.enemies.forEach(eData => {
+        const enemy = new Enemy(eData.x, eData.y);
+        this.deserializeEnemy(eData, enemy);
+        this.enemies.push(enemy);
+      });
+    }
+
+    // Clear transient objects
+    this.bullets = [];
+    this.grenades = [];
+    this.particles = [];
+    this.shellCasings = [];
+    this.smokeClouds = [];
+    this.breachCharges = [];
+
+    // Restore mission state
+    this.missionComplete = data.missionComplete || false;
+    this.missionFailed = data.missionFailed || false;
+    this.isRunning = true;
+    this.isPaused = false;
+
+    // Start game loop
+    this.gameLoop();
+
+    return { success: true };
+  }
+
+  // Show save/load menu
+  showSaveLoadMenu(mode = 'save') {
+    this.isPaused = true;
+    const menu = document.getElementById('save-load-menu');
+    const title = document.getElementById('save-load-title');
+    const saveNameSection = document.getElementById('save-name-section');
+
+    if (menu) {
+      menu.style.display = 'flex';
+      title.textContent = mode === 'save' ? 'SAVE GAME' : 'LOAD GAME';
+      menu.dataset.mode = mode;
+
+      // Show save name input only for save mode
+      if (saveNameSection) {
+        saveNameSection.style.display = mode === 'save' ? 'block' : 'none';
+      }
+
+      this.populateSaveSlots(mode);
+    }
+  }
+
+  // Hide save/load menu
+  hideSaveLoadMenu() {
+    const menu = document.getElementById('save-load-menu');
+    if (menu) {
+      menu.style.display = 'none';
+    }
+    if (this.isRunning) {
+      this.isPaused = false;
+    }
+  }
+
+  // Populate save slots in the UI
+  populateSaveSlots(mode) {
+    const container = document.getElementById('save-slots-container');
+    if (!container) return;
+
+    const saves = saveManager.getAllSaves();
+    container.innerHTML = '';
+
+    // Add "New Save" option in save mode
+    if (mode === 'save') {
+      const newSlot = document.createElement('div');
+      newSlot.className = 'save-slot new-save';
+      newSlot.innerHTML = `
+        <div class="save-slot-content">
+          <div class="save-name">+ Create New Save</div>
+          <div class="save-info">Save to a new slot</div>
+        </div>
+      `;
+      newSlot.addEventListener('click', () => this.handleSaveSlotClick(null, mode));
+      container.appendChild(newSlot);
+    }
+
+    // Add existing saves
+    saves.forEach(save => {
+      const slot = document.createElement('div');
+      slot.className = 'save-slot';
+      slot.dataset.saveId = save.id;
+
+      const date = new Date(save.timestamp);
+      const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+
+      slot.innerHTML = `
+        <div class="save-slot-content">
+          <div class="save-name">${this.escapeHtml(save.name)}</div>
+          <div class="save-info">
+            <span class="save-map">${save.mapName || save.mapType}</span>
+            <span class="save-hp">HP: ${Math.round(save.playerHp || 100)}</span>
+            <span class="save-enemies">Enemies: ${save.enemiesRemaining || '?'}</span>
+          </div>
+          <div class="save-date">${dateStr}</div>
+        </div>
+        <div class="save-slot-actions">
+          ${mode === 'save' ? '<button class="save-overwrite-btn">Overwrite</button>' : '<button class="save-load-btn">Load</button>'}
+          <button class="save-delete-btn">Delete</button>
+        </div>
+      `;
+
+      // Event listeners
+      const actionBtn = slot.querySelector(mode === 'save' ? '.save-overwrite-btn' : '.save-load-btn');
+      actionBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.handleSaveSlotClick(save.id, mode);
+      });
+
+      const deleteBtn = slot.querySelector('.save-delete-btn');
+      deleteBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.handleDeleteSave(save.id);
+      });
+
+      container.appendChild(slot);
+    });
+
+    // Show empty state if no saves and in load mode
+    if (saves.length === 0 && mode === 'load') {
+      const emptyState = document.createElement('div');
+      emptyState.className = 'save-slots-empty';
+      emptyState.textContent = 'No saved games found';
+      container.appendChild(emptyState);
+    }
+  }
+
+  // Handle save slot click
+  handleSaveSlotClick(saveId, mode) {
+    if (mode === 'save') {
+      const nameInput = document.getElementById('save-name-input');
+      const saveName = nameInput?.value.trim() || null;
+      const result = this.saveCurrentGame(saveName, saveId);
+
+      if (result.success) {
+        this.showSaveLoadMessage('Game saved successfully!', 'success');
+        this.populateSaveSlots(mode);
+        if (nameInput) nameInput.value = '';
+      } else {
+        this.showSaveLoadMessage(result.error || 'Failed to save', 'error');
+      }
+    } else {
+      // Load mode
+      const result = this.loadSavedGame(saveId);
+      if (!result.success) {
+        this.showSaveLoadMessage(result.error || 'Failed to load', 'error');
+      }
+    }
+  }
+
+  // Handle delete save
+  handleDeleteSave(saveId) {
+    if (confirm('Are you sure you want to delete this save?')) {
+      const result = saveManager.deleteSave(saveId);
+      if (result.success) {
+        const mode = document.getElementById('save-load-menu')?.dataset.mode || 'save';
+        this.populateSaveSlots(mode);
+        this.showSaveLoadMessage('Save deleted', 'success');
+      } else {
+        this.showSaveLoadMessage(result.error || 'Failed to delete', 'error');
+      }
+    }
+  }
+
+  // Show save/load message
+  showSaveLoadMessage(message, type) {
+    const msgEl = document.getElementById('save-load-message');
+    if (msgEl) {
+      msgEl.textContent = message;
+      msgEl.className = `save-load-message ${type}`;
+      msgEl.style.display = 'block';
+      setTimeout(() => {
+        msgEl.style.display = 'none';
+      }, 3000);
+    }
+  }
+
+  // Escape HTML for display
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Show pause menu
+  showPauseMenu() {
+    if (this.isMultiplayer) return; // No pause in multiplayer
+    this.isPaused = true;
+    document.getElementById('pause-menu').style.display = 'flex';
+  }
+
+  // Hide pause menu
+  hidePauseMenu() {
+    document.getElementById('pause-menu').style.display = 'none';
+  }
+
+  // Resume game from pause
+  resumeGame() {
+    this.isPaused = false;
+    this.hidePauseMenu();
+    this.hideSaveLoadMenu();
+  }
+
+  // Quit to main menu
+  quitToMenu() {
+    this.isRunning = false;
+    this.isPaused = false;
+    this.hidePauseMenu();
+    this.hideSaveLoadMenu();
+    this.showMenu();
+  }
+
+  // Show quick message (for quicksave/quickload feedback)
+  showQuickMessage(message) {
+    // Create or update quick message element
+    let msgEl = document.getElementById('quick-message');
+    if (!msgEl) {
+      msgEl = document.createElement('div');
+      msgEl.id = 'quick-message';
+      msgEl.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: #4caf50;
+        padding: 10px 25px;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        z-index: 2000;
+        border: 1px solid rgba(76, 175, 80, 0.4);
+        font-family: 'Segoe UI', 'Roboto', sans-serif;
+      `;
+      document.body.appendChild(msgEl);
+    }
+    msgEl.textContent = message;
+    msgEl.style.display = 'block';
+
+    setTimeout(() => {
+      msgEl.style.display = 'none';
+    }, 2000);
+  }
 }
+
+// =============================================================================
+// SAVE MANAGER CLASS
+// =============================================================================
+
+class SaveManager {
+  constructor() {
+    this.STORAGE_KEY = 'viscera_saves';
+    this.MAX_SAVES = 10;
+  }
+
+  // Get all saved games
+  getAllSaves() {
+    try {
+      const data = localStorage.getItem(this.STORAGE_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      console.error('Failed to load saves:', e);
+      return [];
+    }
+  }
+
+  // Save a game
+  saveGame(gameData, slotId = null, saveName = null) {
+    const saves = this.getAllSaves();
+    const timestamp = Date.now();
+    const id = slotId || `save_${timestamp}`;
+
+    // Generate default name if not provided
+    const defaultName = `${gameData.mapName} - ${new Date(timestamp).toLocaleString()}`;
+
+    const saveData = {
+      id,
+      name: saveName || defaultName,
+      timestamp,
+      mapType: gameData.mapType,
+      mapName: gameData.mapName,
+      playerHp: gameData.player.hp,
+      enemiesRemaining: gameData.enemies.filter(e => !e.isDead).length,
+      gameState: gameData
+    };
+
+    // Check if updating existing save
+    const existingIndex = saves.findIndex(s => s.id === id);
+    if (existingIndex >= 0) {
+      saves[existingIndex] = saveData;
+    } else {
+      // Add new save (limit to MAX_SAVES)
+      if (saves.length >= this.MAX_SAVES) {
+        // Remove oldest save
+        saves.sort((a, b) => b.timestamp - a.timestamp);
+        saves.pop();
+      }
+      saves.unshift(saveData);
+    }
+
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(saves));
+      return { success: true, saveId: id };
+    } catch (e) {
+      console.error('Failed to save game:', e);
+      return { success: false, error: 'Storage full or unavailable' };
+    }
+  }
+
+  // Load a game by ID
+  loadGame(saveId) {
+    const saves = this.getAllSaves();
+    const save = saves.find(s => s.id === saveId);
+    if (save) {
+      return { success: true, data: save.gameState };
+    }
+    return { success: false, error: 'Save not found' };
+  }
+
+  // Delete a save by ID
+  deleteSave(saveId) {
+    const saves = this.getAllSaves();
+    const filteredSaves = saves.filter(s => s.id !== saveId);
+
+    if (filteredSaves.length === saves.length) {
+      return { success: false, error: 'Save not found' };
+    }
+
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filteredSaves));
+      return { success: true };
+    } catch (e) {
+      console.error('Failed to delete save:', e);
+      return { success: false, error: 'Failed to delete' };
+    }
+  }
+
+  // Rename a save
+  renameSave(saveId, newName) {
+    const saves = this.getAllSaves();
+    const save = saves.find(s => s.id === saveId);
+
+    if (!save) {
+      return { success: false, error: 'Save not found' };
+    }
+
+    save.name = newName;
+
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(saves));
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: 'Failed to rename' };
+    }
+  }
+}
+
+// Global save manager instance
+const saveManager = new SaveManager();
 
 // =============================================================================
 // INITIALIZE
