@@ -214,11 +214,13 @@ function handleMessage(playerId, ws, message) {
       const room = getRoomByPlayerId(playerId);
       if (room && room.hostId === playerId) {
         room.gameStarted = true;
+        room.mapType = message.mapType || 'compound';
 
         const gameData = {
           type: 'game_start',
           players: room.players,
-          aiCount: message.aiCount || 2
+          aiCount: message.aiCount || Math.max(0, 4 - room.players.length),
+          mapType: room.mapType
         };
 
         broadcastToRoom(room, gameData);
