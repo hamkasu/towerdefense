@@ -1597,7 +1597,212 @@ class Level {
     this.objectives = [];
     this.mapType = mapType;
     this.mapName = MAP_TYPES[mapType]?.name || 'Unknown';
+
+    // Fog of war system - track discovered areas using a grid
+    this.fogGridSize = 50; // Size of each fog cell
+    this.fogGridWidth = Math.ceil(CONFIG.MAP_WIDTH / this.fogGridSize);
+    this.fogGridHeight = Math.ceil(CONFIG.MAP_HEIGHT / this.fogGridSize);
+    this.discoveredGrid = new Array(this.fogGridWidth * this.fogGridHeight).fill(false);
+    this.visibilityRange = 350; // How far player can see
+
     this.generate(mapType);
+  }
+
+  // Update discovered areas based on player and team positions
+  updateFogOfWar(playerX, playerY, teammates = []) {
+    const range = this.visibilityRange;
+    const gridSize = this.fogGridSize;
+
+    // Helper to reveal around a position
+    const revealAround = (x, y) => {
+      const cellsToReveal = Math.ceil(range / gridSize) + 1;
+      const centerCellX = Math.floor(x / gridSize);
+      const centerCellY = Math.floor(y / gridSize);
+
+      for (let dx = -cellsToReveal; dx <= cellsToReveal; dx++) {
+        for (let dy = -cellsToReveal; dy <= cellsToReveal; dy++) {
+          const cellX = centerCellX + dx;
+          const cellY = centerCellY + dy;
+
+          if (cellX >= 0 && cellX < this.fogGridWidth && cellY >= 0 && cellY < this.fogGridHeight) {
+            const cellCenterX = (cellX + 0.5) * gridSize;
+            const cellCenterY = (cellY + 0.5) * gridSize;
+            const dist = utils.distance(x, y, cellCenterX, cellCenterY);
+
+            if (dist <= range) {
+              this.discoveredGrid[cellY * this.fogGridWidth + cellX] = true;
+            }
+          }
+        }
+      }
+    };
+
+    // Reveal around player
+    revealAround(playerX, playerY);
+
+    // Reveal around living teammates
+    for (const tm of teammates) {
+      if (!tm.isDead) {
+        revealAround(tm.x, tm.y);
+      }
+    }
+  }
+
+  // Check if a position is currently visible (in range of player/team)
+  isCurrentlyVisible(x, y, playerX, playerY, teammates = []) {
+    if (utils.distance(x, y, playerX, playerY) <= this.visibilityRange) {
+      return true;
+    }
+    for (const tm of teammates) {
+      if (!tm.isDead && utils.distance(x, y, tm.x, tm.y) <= this.visibilityRange) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Check if a position has been discovered
+  isDiscovered(x, y) {
+    const cellX = Math.floor(x / this.fogGridSize);
+    const cellY = Math.floor(y / this.fogGridSize);
+    if (cellX >= 0 && cellX < this.fogGridWidth && cellY >= 0 && cellY < this.fogGridHeight) {
+      return this.discoveredGrid[cellY * this.fogGridWidth + cellX];
+    }
+    return false;
+  }
+
+  // Standardized office layout helper - generates consistent office design
+  generateStandardOfficeLayout(themeName = 'Office') {
+    const W = CONFIG.MAP_WIDTH;
+    const H = CONFIG.MAP_HEIGHT;
+
+    // Outer walls
+    this.addWall(0, 0, W, 20, 'concrete');
+    this.addWall(0, H-20, W, 20, 'concrete');
+    this.addWall(0, 0, 20, H, 'concrete');
+    this.addWall(W-20, 0, 20, H, 'concrete');
+
+    // === GRID OF OFFICES ===
+    const roomWidth = 250;
+    const roomHeight = 200;
+    const corridorWidth = 100;
+
+    // Main horizontal corridors with guaranteed doors
+    for (let y = 0; y < 4; y++) {
+      const corridorY = 300 + y * (roomHeight + corridorWidth);
+      this.addWall(20, corridorY, W - 40, 12, 'drywall');
+      // Add doors along corridor at fixed positions
+      for (let x = 0; x < 8; x++) {
+        this.addDoor(150 + x * 350, corridorY, 60, 12, 'horizontal');
+      }
+    }
+
+    // Main vertical corridors with guaranteed doors
+    for (let x = 0; x < 5; x++) {
+      const corridorX = 400 + x * (roomWidth + corridorWidth + 150);
+      if (corridorX < W - 100) {
+        this.addWall(corridorX, 20, 12, H - 40, 'drywall');
+        // Add doors at fixed positions
+        for (let y = 0; y < 5; y++) {
+          this.addDoor(corridorX, 150 + y * 400, 12, 60, 'vertical');
+        }
+      }
+    }
+
+    // === CONFERENCE ROOMS (glass walls) ===
+    // Conference 1 (top left)
+    this.addWall(100, 100, 250, 12, 'glass');
+    this.addWall(100, 100, 12, 150, 'drywall');
+    this.addWall(350, 100, 12, 150, 'drywall');
+    this.addDoor(350, 150, 12, 50, 'vertical');
+
+    // Conference 2 (top center-left)
+    this.addWall(600, 100, 300, 12, 'glass');
+    this.addWall(600, 100, 12, 150, 'drywall');
+    this.addWall(900, 100, 12, 150, 'drywall');
+    this.addDoor(600, 150, 12, 50, 'vertical');
+
+    // === EXECUTIVE SUITE (top right) ===
+    this.addWall(2200, 100, 12, 400, 'drywall');
+    this.addDoor(2200, 250, 12, 80, 'vertical');
+    this.addWall(2200, 100, 600, 12, 'drywall');
+    this.addWall(2200, 500, 600, 12, 'drywall');
+    this.addWall(2500, 100, 12, 400, 'drywall');
+    this.addDoor(2500, 280, 12, 60, 'vertical');
+    // Glass windows in executive suite
+    this.addWall(2300, 112, 8, 150, 'glass');
+    this.addWall(2600, 112, 8, 150, 'glass');
+
+    // === SERVER ROOM (metal walls, center-right) ===
+    this.addWall(1500, 800, 300, 15, 'metal');
+    this.addWall(1500, 800, 15, 250, 'metal');
+    this.addWall(1500, 1050, 300, 15, 'metal');
+    this.addWall(1800, 800, 15, 250, 'metal');
+    this.addDoor(1500, 900, 15, 60, 'vertical');
+
+    // === CUBICLE AREAS (wood partitions) ===
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 6; col++) {
+        const x = 100 + col * 180;
+        const y = 600 + row * 150;
+        if (y < 1100) {
+          this.addWall(x, y, 120, 8, 'wood');
+          this.addWall(x, y, 8, 80, 'wood');
+        }
+      }
+    }
+
+    // === BREAK ROOM (right side) ===
+    this.addWall(2400, 700, 12, 300, 'drywall');
+    this.addDoor(2400, 800, 12, 60, 'vertical');
+    this.addWall(2400, 700, 400, 12, 'drywall');
+    this.addWall(2400, 1000, 400, 12, 'drywall');
+
+    // === RECEPTION AREA (bottom center) ===
+    this.addWall(20, 1500, 800, 15, 'glass');
+    this.addWall(900, 1500, 800, 15, 'glass');
+    this.addDoor(800, 1500, 100, 15, 'horizontal');
+    this.addWall(400, 1515, 12, 300, 'drywall');
+    this.addWall(800, 1515, 12, 300, 'drywall');
+    this.addWall(1200, 1515, 12, 300, 'drywall');
+
+    // === BATHROOMS (bottom right) ===
+    this.addWall(1800, 1500, 15, 400, 'concrete');
+    this.addWall(1815, 1500, 200, 12, 'concrete');
+    this.addWall(2015, 1500, 15, 400, 'concrete');
+    this.addDoor(1800, 1650, 15, 50, 'vertical');
+    this.addWall(1815, 1700, 200, 12, 'drywall');
+    this.addDoor(1900, 1700, 50, 12, 'horizontal');
+
+    // === STAIRWELLS (far bottom right) ===
+    this.addWall(2600, 1400, 200, 15, 'concrete');
+    this.addWall(2600, 1400, 15, 400, 'concrete');
+    this.addWall(2600, 1800, 200, 15, 'concrete');
+    this.addWall(2800, 1400, 15, 400, 'concrete');
+    this.addDoor(2600, 1550, 15, 80, 'vertical');
+
+    // === SCATTERED DESKS/FURNITURE ===
+    this.addWall(1200, 400, 60, 30, 'wood');
+    this.addWall(1600, 350, 40, 40, 'wood');
+    this.addWall(2000, 600, 50, 30, 'wood');
+
+    // Default spawn points (can be overridden by specific maps)
+    this.spawnPoints.team = [
+      {x: 850, y: 1700}, {x: 900, y: 1750}, {x: 800, y: 1750}, {x: 850, y: 1800}
+    ];
+
+    this.spawnPoints.enemy = [
+      {x: 2700, y: 300}, {x: 2400, y: 200},
+      {x: 1650, y: 900}, {x: 200, y: 200},
+      {x: 750, y: 400}, {x: 1300, y: 700},
+      {x: 2600, y: 900}, {x: 500, y: 800},
+      {x: 1900, y: 1600}, {x: 2700, y: 1600}
+    ];
+
+    // Default objectives (can be overridden)
+    this.objectives.push({x: 2600, y: 300, type: 'hostage', secured: false});
+    this.objectives.push({x: 1650, y: 920, type: 'intel', secured: false});
+    this.objectives.push({x: 200, y: 150, type: 'bomb', secured: false});
   }
 
   generate(mapType) {
@@ -1632,296 +1837,35 @@ class Level {
   }
 
   generateCompound() {
-    const W = CONFIG.MAP_WIDTH;
-    const H = CONFIG.MAP_HEIGHT;
+    // Use standardized office layout
+    this.generateStandardOfficeLayout('Military Compound');
 
-    // Outer walls (concrete)
-    this.addWall(0, 0, W, 20, 'concrete');
-    this.addWall(0, H-20, W, 20, 'concrete');
-    this.addWall(0, 0, 20, H, 'concrete');
-    this.addWall(W-20, 0, 20, H, 'concrete');
-
-    // === BUILDING 1: ENTRY (LEFT SIDE) ===
-    // Main corridor vertical wall
-    this.addWall(400, 20, 15, 450, 'concrete');
-    this.addWall(400, 520, 15, 500, 'concrete');
-    this.addDoor(400, 470, 15, 50, 'vertical');
-
-    // Room 1A (top left) - Reception
-    this.addWall(20, 300, 380, 12, 'drywall');
-    this.addDoor(200, 300, 60, 12, 'horizontal');
-    this.addWall(200, 20, 12, 280, 'drywall');
-    this.addDoor(200, 150, 12, 60, 'vertical');
-
-    // Room 1B (bottom left) - Storage
-    this.addWall(20, 600, 380, 12, 'drywall');
-    this.addDoor(150, 600, 60, 12, 'horizontal');
-    this.addWall(200, 612, 12, 300, 'drywall');
-    this.addDoor(200, 750, 12, 60, 'vertical');
-
-    // Room 1C (far bottom left) - Basement
-    this.addWall(20, 900, 180, 12, 'concrete');
-    this.addDoor(100, 900, 50, 12, 'horizontal');
-
-    // === BUILDING 2: CENTRAL HUB ===
-    // Vertical walls
-    this.addWall(800, 20, 15, 400, 'concrete');
-    this.addWall(800, 470, 15, 500, 'concrete');
-    this.addDoor(800, 420, 15, 50, 'vertical');
-
-    // Horizontal connections
-    this.addWall(415, 400, 385, 12, 'drywall');
-    this.addDoor(550, 400, 60, 12, 'horizontal');
-    this.addWall(415, 700, 385, 12, 'drywall');
-    this.addDoor(650, 700, 60, 12, 'horizontal');
-
-    // Central rooms
-    this.addWall(550, 412, 12, 140, 'drywall');
-    this.addDoor(550, 470, 12, 50, 'vertical');
-    this.addWall(650, 412, 12, 140, 'drywall');
-    this.addDoor(650, 470, 12, 50, 'vertical');
-
-    // Top central area
-    this.addWall(550, 150, 12, 200, 'drywall');
-    this.addWall(550, 150, 250, 12, 'drywall');
-    this.addDoor(680, 150, 60, 12, 'horizontal');
-    this.addDoor(550, 250, 12, 50, 'vertical');
-
-    // === BUILDING 3: RIGHT WING ===
-    this.addWall(1200, 20, 15, 600, 'concrete');
-    this.addWall(1200, 670, 15, 500, 'concrete');
-    this.addDoor(1200, 620, 15, 50, 'vertical');
-
-    // Offices right side
-    this.addWall(815, 300, 385, 12, 'drywall');
-    this.addDoor(1000, 300, 60, 12, 'horizontal');
-    this.addWall(1000, 20, 12, 280, 'drywall');
-    this.addDoor(1000, 150, 12, 60, 'vertical');
-
-    // Conference room
-    this.addWall(815, 550, 385, 15, 'glass');
-    this.addDoor(950, 550, 15, 60, 'vertical');
-
-    // Server room (metal)
-    this.addWall(900, 800, 300, 12, 'metal');
-    this.addWall(900, 800, 12, 200, 'metal');
-    this.addWall(900, 1000, 300, 12, 'metal');
-    this.addDoor(900, 880, 12, 60, 'vertical');
-
-    // === BUILDING 4: FAR RIGHT COMPOUND ===
-    this.addWall(1600, 20, 15, 800, 'concrete');
-    this.addWall(1600, 870, 15, 700, 'concrete');
-    this.addDoor(1600, 820, 15, 50, 'vertical');
-
-    // Upper compound
-    this.addWall(1215, 400, 385, 15, 'concrete');
-    this.addDoor(1400, 400, 60, 15, 'horizontal');
-
-    // Research labs
-    this.addWall(1400, 20, 12, 380, 'drywall');
-    this.addDoor(1400, 200, 12, 60, 'vertical');
-    this.addWall(1300, 200, 100, 12, 'glass');
-
-    // Lower compound rooms
-    this.addWall(1215, 600, 200, 12, 'drywall');
-    this.addDoor(1300, 600, 50, 12, 'horizontal');
-    this.addWall(1450, 600, 150, 12, 'drywall');
-    this.addDoor(1500, 600, 50, 12, 'horizontal');
-
-    // === BUILDING 5: SOUTHERN COMPLEX ===
-    this.addWall(400, 1100, 800, 15, 'concrete');
-    this.addDoor(750, 1100, 60, 15, 'horizontal');
-
-    // South rooms
-    this.addWall(600, 1115, 12, 300, 'drywall');
-    this.addDoor(600, 1200, 12, 60, 'vertical');
-    this.addWall(900, 1115, 12, 300, 'drywall');
-    this.addDoor(900, 1250, 12, 60, 'vertical');
-
-    // Armory (metal)
-    this.addWall(1100, 1115, 12, 200, 'metal');
-    this.addWall(1100, 1300, 200, 12, 'metal');
-    this.addDoor(1100, 1200, 12, 50, 'vertical');
-
-    // === OUTDOOR AREAS ===
-    // Courtyard walls
-    this.addWall(1700, 500, 300, 15, 'concrete');
-    this.addWall(1700, 500, 15, 400, 'concrete');
-    this.addWall(1700, 900, 300, 15, 'concrete');
-    this.addDoor(1700, 680, 15, 60, 'vertical');
-
-    // Guard tower
-    this.addWall(2200, 200, 200, 15, 'concrete');
-    this.addWall(2200, 200, 15, 200, 'concrete');
-    this.addWall(2200, 400, 200, 15, 'concrete');
-    this.addWall(2400, 200, 15, 200, 'concrete');
-    this.addDoor(2200, 280, 15, 60, 'vertical');
-
-    // Warehouse
-    this.addWall(2000, 700, 400, 15, 'metal');
-    this.addWall(2000, 700, 15, 400, 'metal');
-    this.addWall(2000, 1100, 400, 15, 'metal');
-    this.addWall(2400, 700, 15, 400, 'metal');
-    this.addDoor(2000, 850, 15, 80, 'vertical');
-    this.addDoor(2150, 700, 80, 15, 'horizontal');
-
-    // Additional warehouse interior
-    this.addWall(2150, 850, 12, 200, 'drywall');
-    this.addWall(2300, 800, 12, 150, 'wood');
-
-    // === PERIMETER STRUCTURES ===
-    // North fence with gap
-    this.addWall(1700, 100, 600, 12, 'concrete');
-    this.addWall(2400, 100, 580, 12, 'concrete');
-
-    // East compound
-    this.addWall(2600, 300, 15, 600, 'concrete');
-    this.addWall(2600, 950, 15, 600, 'concrete');
-    this.addDoor(2600, 900, 15, 50, 'vertical');
-
-    this.addWall(2615, 500, 300, 12, 'drywall');
-    this.addDoor(2750, 500, 60, 12, 'horizontal');
-    this.addWall(2615, 800, 300, 12, 'drywall');
-    this.addDoor(2700, 800, 60, 12, 'horizontal');
-
-    // === COVER OBJECTS ===
-    // Various cover throughout the map
-    this.addWall(500, 200, 40, 20, 'wood');
-    this.addWall(700, 550, 50, 20, 'wood');
-    this.addWall(1050, 450, 20, 50, 'wood');
-    this.addWall(1350, 550, 40, 20, 'wood');
-    this.addWall(1800, 650, 30, 30, 'wood');
-    this.addWall(2250, 950, 40, 20, 'wood');
-    this.addWall(450, 800, 30, 30, 'wood');
-    this.addWall(1500, 900, 50, 20, 'wood');
-    this.addWall(2100, 350, 30, 40, 'wood');
-    this.addWall(2700, 650, 40, 20, 'wood');
-
-    // Glass windows throughout
-    this.addWall(250, 100, 100, 8, 'glass');
-    this.addWall(600, 80, 8, 60, 'glass');
-    this.addWall(1100, 100, 80, 8, 'glass');
-    this.addWall(1800, 300, 8, 100, 'glass');
-    this.addWall(2500, 400, 80, 8, 'glass');
-
-    // === SPAWN POINTS ===
+    // Override spawn points for compound theme
     this.spawnPoints.team = [
       {x: 60, y: 60}, {x: 100, y: 60}, {x: 60, y: 100}, {x: 100, y: 100}
     ];
 
     this.spawnPoints.enemy = [
-      // Building entrances
-      {x: 2850, y: 600}, {x: 2850, y: 700},
-      // Guard tower
-      {x: 2300, y: 300},
-      // Warehouse
-      {x: 2200, y: 900}, {x: 2300, y: 1000},
-      // Far right compound
-      {x: 1500, y: 300}, {x: 1700, y: 700},
-      // Central areas
-      {x: 1100, y: 900}, {x: 700, y: 500},
-      // Roaming
-      {x: 1900, y: 400}, {x: 2500, y: 1000},
+      {x: 2700, y: 300}, {x: 2400, y: 200},
+      {x: 1650, y: 900}, {x: 200, y: 200},
+      {x: 750, y: 400}, {x: 1300, y: 700},
+      {x: 2600, y: 900}, {x: 500, y: 800},
+      {x: 1900, y: 1600}, {x: 2700, y: 1600},
       {x: 1000, y: 600}, {x: 600, y: 1300}
     ];
 
-    // === OBJECTIVES ===
-    this.objectives.push({x: 2850, y: 650, type: 'hostage', secured: false});
-    this.objectives.push({x: 2300, y: 950, type: 'intel', secured: false});
-    this.objectives.push({x: 1000, y: 900, type: 'bomb', secured: false});
+    // Override objectives for compound theme
+    this.objectives = [];
+    this.objectives.push({x: 2600, y: 300, type: 'hostage', secured: false});
+    this.objectives.push({x: 1650, y: 920, type: 'intel', secured: false});
+    this.objectives.push({x: 200, y: 150, type: 'bomb', secured: false});
   }
 
   generateWarehouse() {
-    const W = CONFIG.MAP_WIDTH;
-    const H = CONFIG.MAP_HEIGHT;
+    // Use standardized office layout
+    this.generateStandardOfficeLayout('Abandoned Warehouse');
 
-    // Outer walls
-    this.addWall(0, 0, W, 20, 'metal');
-    this.addWall(0, H-20, W, 20, 'metal');
-    this.addWall(0, 0, 20, H, 'metal');
-    this.addWall(W-20, 0, 20, H, 'metal');
-
-    // === MAIN WAREHOUSE SECTIONS ===
-    // Warehouse A - Left side
-    this.addWall(500, 20, 15, 800, 'metal');
-    this.addDoor(500, 400, 15, 80, 'vertical');
-    this.addWall(20, 400, 480, 15, 'metal');
-    this.addDoor(250, 400, 80, 15, 'horizontal');
-
-    // Storage racks (wood)
-    for (let i = 0; i < 3; i++) {
-      this.addWall(80 + i * 140, 100, 80, 20, 'wood');
-      this.addWall(80 + i * 140, 200, 80, 20, 'wood');
-      this.addWall(80 + i * 140, 550, 80, 20, 'wood');
-      this.addWall(80 + i * 140, 650, 80, 20, 'wood');
-    }
-
-    // Warehouse B - Center
-    this.addWall(500, 900, 15, 600, 'metal');
-    this.addDoor(500, 1100, 15, 80, 'vertical');
-    this.addWall(515, 900, 600, 15, 'metal');
-    this.addDoor(750, 900, 80, 15, 'horizontal');
-
-    // Central open area with scattered cover
-    this.addWall(700, 300, 100, 30, 'wood');
-    this.addWall(900, 500, 30, 100, 'wood');
-    this.addWall(1100, 200, 80, 30, 'wood');
-    this.addWall(1300, 400, 30, 80, 'wood');
-
-    // Warehouse C - Right side
-    this.addWall(1500, 20, 15, 900, 'metal');
-    this.addDoor(1500, 450, 15, 100, 'vertical');
-    this.addWall(1515, 500, 500, 15, 'metal');
-    this.addDoor(1700, 500, 100, 15, 'horizontal');
-
-    // Loading docks
-    this.addWall(2000, 20, 15, 400, 'concrete');
-    this.addWall(2000, 470, 15, 450, 'concrete');
-    this.addDoor(2000, 420, 15, 50, 'vertical');
-
-    for (let i = 0; i < 4; i++) {
-      this.addWall(2100, 80 + i * 200, 200, 15, 'concrete');
-      this.addWall(2100, 150 + i * 200, 200, 15, 'concrete');
-    }
-
-    // Office section (top right)
-    this.addWall(2200, 900, 15, 600, 'drywall');
-    this.addDoor(2200, 1100, 15, 60, 'vertical');
-    this.addWall(2215, 900, 300, 12, 'drywall');
-    this.addWall(2215, 1100, 300, 12, 'drywall');
-    this.addDoor(2350, 1100, 60, 12, 'horizontal');
-    this.addWall(2215, 1300, 300, 12, 'drywall');
-    this.addDoor(2300, 1300, 60, 12, 'horizontal');
-
-    // Glass windows in office
-    this.addWall(2215, 950, 8, 100, 'glass');
-    this.addWall(2215, 1150, 8, 100, 'glass');
-
-    // Southern warehouse section
-    this.addWall(800, 1200, 15, 500, 'metal');
-    this.addDoor(800, 1400, 15, 80, 'vertical');
-    this.addWall(1200, 1200, 15, 500, 'metal');
-    this.addDoor(1200, 1350, 15, 80, 'vertical');
-
-    // Container yard (bottom)
-    for (let i = 0; i < 5; i++) {
-      this.addWall(100 + i * 300, 1500, 200, 50, 'metal');
-      this.addWall(200 + i * 300, 1700, 200, 50, 'metal');
-    }
-
-    // Forklift paths (open corridors)
-    this.addWall(600, 1000, 150, 20, 'wood');
-    this.addWall(1000, 1050, 150, 20, 'wood');
-
-    // Security booth
-    this.addWall(2600, 1000, 200, 15, 'concrete');
-    this.addWall(2600, 1000, 15, 200, 'concrete');
-    this.addWall(2600, 1200, 200, 15, 'concrete');
-    this.addWall(2800, 1000, 15, 200, 'concrete');
-    this.addDoor(2600, 1080, 15, 60, 'vertical');
-    this.addWall(2620, 1050, 8, 80, 'glass');
-
-    // Spawn points
+    // Override spawn points for warehouse theme
     this.spawnPoints.team = [
       {x: 60, y: 60}, {x: 120, y: 60}, {x: 60, y: 120}, {x: 120, y: 120}
     ];
@@ -1934,132 +1878,74 @@ class Level {
       {x: 1400, y: 100}, {x: 900, y: 700}
     ];
 
-    this.objectives.push({x: 2700, y: 1100, type: 'hostage', secured: false});
+    // Override objectives for warehouse theme
+    this.objectives = [];
+    this.objectives.push({x: 2700, y: 800, type: 'hostage', secured: false});
     this.objectives.push({x: 300, y: 1650, type: 'intel', secured: false});
-    this.objectives.push({x: 1700, y: 250, type: 'bomb', secured: false});
+    this.objectives.push({x: 1650, y: 920, type: 'bomb', secured: false});
   }
 
   generateOffice() {
-    const W = CONFIG.MAP_WIDTH;
-    const H = CONFIG.MAP_HEIGHT;
+    // Use standardized office layout (this is the base design)
+    this.generateStandardOfficeLayout('Office Complex');
+    // Default spawn points and objectives are already set by the helper
+  }
 
-    // Outer walls
-    this.addWall(0, 0, W, 20, 'concrete');
-    this.addWall(0, H-20, W, 20, 'concrete');
-    this.addWall(0, 0, 20, H, 'concrete');
-    this.addWall(W-20, 0, 20, H, 'concrete');
+  generateEmbassy() {
+    // Use standardized office layout
+    this.generateStandardOfficeLayout('Embassy');
 
-    // === FLOOR 1 STYLE - Grid of offices ===
-    const roomWidth = 250;
-    const roomHeight = 200;
-    const corridorWidth = 100;
-
-    // Main horizontal corridors
-    for (let y = 0; y < 4; y++) {
-      const corridorY = 300 + y * (roomHeight + corridorWidth);
-      this.addWall(20, corridorY, W - 40, 12, 'drywall');
-      // Add doors along corridor
-      for (let x = 0; x < 8; x++) {
-        if (Math.random() > 0.3) {
-          this.addDoor(150 + x * 350, corridorY, 60, 12, 'horizontal');
-        }
-      }
-    }
-
-    // Main vertical corridors
-    for (let x = 0; x < 5; x++) {
-      const corridorX = 400 + x * (roomWidth + corridorWidth + 150);
-      if (corridorX < W - 100) {
-        this.addWall(corridorX, 20, 12, H - 40, 'drywall');
-        // Add doors
-        for (let y = 0; y < 5; y++) {
-          if (Math.random() > 0.3) {
-            this.addDoor(corridorX, 150 + y * 400, 12, 60, 'vertical');
-          }
-        }
-      }
-    }
-
-    // Conference rooms (larger rooms with glass)
-    // Conference 1
-    this.addWall(100, 100, 250, 12, 'glass');
-    this.addWall(100, 100, 12, 150, 'drywall');
-    this.addWall(350, 100, 12, 150, 'drywall');
-    this.addDoor(350, 150, 12, 50, 'vertical');
-
-    // Conference 2
-    this.addWall(600, 100, 300, 12, 'glass');
-    this.addWall(600, 100, 12, 150, 'drywall');
-    this.addWall(900, 100, 12, 150, 'drywall');
-    this.addDoor(600, 150, 12, 50, 'vertical');
-
-    // Executive suite (top right)
-    this.addWall(2200, 100, 12, 400, 'drywall');
-    this.addDoor(2200, 250, 12, 80, 'vertical');
-    this.addWall(2200, 100, 600, 12, 'drywall');
-    this.addWall(2200, 500, 600, 12, 'drywall');
-    this.addWall(2500, 100, 12, 400, 'drywall');
-    this.addDoor(2500, 280, 12, 60, 'vertical');
-    // Glass windows
-    this.addWall(2300, 112, 8, 150, 'glass');
-    this.addWall(2600, 112, 8, 150, 'glass');
-
-    // Server room (metal walls)
-    this.addWall(1500, 800, 300, 15, 'metal');
-    this.addWall(1500, 800, 15, 250, 'metal');
-    this.addWall(1500, 1050, 300, 15, 'metal');
-    this.addWall(1800, 800, 15, 250, 'metal');
-    this.addDoor(1500, 900, 15, 60, 'vertical');
-
-    // Cubicle areas (wood partitions)
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 6; col++) {
-        const x = 100 + col * 180;
-        const y = 600 + row * 150;
-        if (y < 1100) {
-          this.addWall(x, y, 120, 8, 'wood');
-          this.addWall(x, y, 8, 80, 'wood');
-        }
-      }
-    }
-
-    // Break room
-    this.addWall(2400, 700, 12, 300, 'drywall');
-    this.addDoor(2400, 800, 12, 60, 'vertical');
-    this.addWall(2400, 700, 400, 12, 'drywall');
-    this.addWall(2400, 1000, 400, 12, 'drywall');
-
-    // Reception area (bottom)
-    this.addWall(20, 1500, 800, 15, 'glass');
-    this.addWall(900, 1500, 800, 15, 'glass');
-    this.addDoor(800, 1500, 100, 15, 'horizontal');
-    this.addWall(400, 1515, 12, 300, 'drywall');
-    this.addWall(800, 1515, 12, 300, 'drywall');
-    this.addWall(1200, 1515, 12, 300, 'drywall');
-
-    // Bathrooms
-    this.addWall(1800, 1500, 15, 400, 'concrete');
-    this.addWall(1815, 1500, 200, 12, 'concrete');
-    this.addWall(2015, 1500, 15, 400, 'concrete');
-    this.addDoor(1800, 1650, 15, 50, 'vertical');
-    this.addWall(1815, 1700, 200, 12, 'drywall');
-    this.addDoor(1900, 1700, 50, 12, 'horizontal');
-
-    // Stairwells
-    this.addWall(2600, 1400, 200, 15, 'concrete');
-    this.addWall(2600, 1400, 15, 400, 'concrete');
-    this.addWall(2600, 1800, 200, 15, 'concrete');
-    this.addWall(2800, 1400, 15, 400, 'concrete');
-    this.addDoor(2600, 1550, 15, 80, 'vertical');
-
-    // Scattered desks/furniture
-    this.addWall(1200, 400, 60, 30, 'wood');
-    this.addWall(1600, 350, 40, 40, 'wood');
-    this.addWall(2000, 600, 50, 30, 'wood');
-
-    // Spawn points
+    // Override spawn points for embassy theme
     this.spawnPoints.team = [
-      {x: 850, y: 1700}, {x: 900, y: 1750}, {x: 800, y: 1750}, {x: 850, y: 1800}
+      {x: 100, y: 1000}, {x: 100, y: 1050}, {x: 100, y: 1100}, {x: 150, y: 1050}
+    ];
+
+    this.spawnPoints.enemy = [
+      {x: 2350, y: 750}, {x: 2400, y: 500}, {x: 2300, y: 1100},
+      {x: 1500, y: 500}, {x: 650, y: 700}, {x: 650, y: 900},
+      {x: 1500, y: 1400}, {x: 1200, y: 1000},
+      {x: 350, y: 350}, {x: 2650, y: 350}, {x: 2700, y: 1800}
+    ];
+
+    // Override objectives for embassy theme
+    this.objectives = [];
+    this.objectives.push({x: 2600, y: 300, type: 'hostage', secured: false});
+    this.objectives.push({x: 1650, y: 920, type: 'intel', secured: false});
+    this.objectives.push({x: 200, y: 150, type: 'bomb', secured: false});
+  }
+
+  generateJungle() {
+    // Use standardized office layout
+    this.generateStandardOfficeLayout('Jungle Outpost');
+
+    // Override spawn points for jungle theme (spawn at bottom)
+    this.spawnPoints.team = [
+      {x: 150, y: 1950}, {x: 200, y: 1950}, {x: 150, y: 2000}, {x: 200, y: 2000}
+    ];
+
+    this.spawnPoints.enemy = [
+      {x: 1300, y: 950}, {x: 1500, y: 950},
+      {x: 420, y: 600}, {x: 2500, y: 300},
+      {x: 950, y: 1600}, {x: 1800, y: 500},
+      {x: 2200, y: 900}, {x: 800, y: 1200},
+      {x: 2400, y: 1300}, {x: 1500, y: 1500},
+      {x: 2700, y: 800}, {x: 600, y: 400}
+    ];
+
+    // Override objectives for jungle theme
+    this.objectives = [];
+    this.objectives.push({x: 2600, y: 300, type: 'hostage', secured: false});
+    this.objectives.push({x: 1650, y: 920, type: 'intel', secured: false});
+    this.objectives.push({x: 200, y: 150, type: 'bomb', secured: false});
+  }
+
+  generateRandom() {
+    // Use standardized office layout (same as other maps)
+    this.generateStandardOfficeLayout('Random Generated');
+
+    // Override spawn points for random theme
+    this.spawnPoints.team = [
+      {x: 80, y: 80}, {x: 140, y: 80}, {x: 80, y: 140}, {x: 140, y: 140}
     ];
 
     this.spawnPoints.enemy = [
@@ -2070,500 +1956,11 @@ class Level {
       {x: 1900, y: 1600}, {x: 2700, y: 1600}
     ];
 
+    // Override objectives for random theme
+    this.objectives = [];
     this.objectives.push({x: 2600, y: 300, type: 'hostage', secured: false});
     this.objectives.push({x: 1650, y: 920, type: 'intel', secured: false});
     this.objectives.push({x: 200, y: 150, type: 'bomb', secured: false});
-  }
-
-  generateEmbassy() {
-    const W = CONFIG.MAP_WIDTH;
-    const H = CONFIG.MAP_HEIGHT;
-
-    // Outer walls - thick concrete
-    this.addWall(0, 0, W, 25, 'concrete');
-    this.addWall(0, H-25, W, 25, 'concrete');
-    this.addWall(0, 0, 25, H, 'concrete');
-    this.addWall(W-25, 0, 25, H, 'concrete');
-
-    // === MAIN BUILDING ===
-    // Perimeter fence (inner)
-    this.addWall(200, 200, 2600, 15, 'metal');
-    this.addWall(200, 200, 15, 1700, 'metal');
-    this.addWall(200, 1900, 2600, 15, 'metal');
-    this.addWall(2800, 200, 15, 1700, 'metal');
-    // Gates
-    this.addDoor(200, 1000, 15, 100, 'vertical');
-    this.addDoor(1400, 200, 100, 15, 'horizontal');
-
-    // Main embassy building
-    this.addWall(500, 400, 15, 1200, 'concrete');
-    this.addWall(2500, 400, 15, 1200, 'concrete');
-    this.addWall(500, 400, 2000, 15, 'concrete');
-    this.addWall(500, 1600, 2000, 15, 'concrete');
-    // Main entrance
-    this.addDoor(1400, 1600, 120, 15, 'horizontal');
-    // Side entrances
-    this.addDoor(500, 900, 15, 80, 'vertical');
-    this.addDoor(2500, 900, 15, 80, 'vertical');
-
-    // Grand foyer
-    this.addWall(800, 1200, 1400, 15, 'drywall');
-    this.addDoor(1400, 1200, 120, 15, 'horizontal');
-    // Pillars
-    this.addWall(900, 1300, 30, 30, 'concrete');
-    this.addWall(1200, 1300, 30, 30, 'concrete');
-    this.addWall(1700, 1300, 30, 30, 'concrete');
-    this.addWall(2000, 1300, 30, 30, 'concrete');
-
-    // West wing - offices
-    this.addWall(800, 415, 12, 785, 'drywall');
-    this.addDoor(800, 700, 12, 60, 'vertical');
-    this.addDoor(800, 1000, 12, 60, 'vertical');
-
-    // Office rooms
-    this.addWall(515, 600, 285, 12, 'drywall');
-    this.addDoor(650, 600, 50, 12, 'horizontal');
-    this.addWall(515, 800, 285, 12, 'drywall');
-    this.addDoor(700, 800, 50, 12, 'horizontal');
-    this.addWall(515, 1000, 285, 12, 'drywall');
-    this.addDoor(600, 1000, 50, 12, 'horizontal');
-
-    // East wing - secure area
-    this.addWall(2200, 415, 12, 785, 'metal');
-    this.addDoor(2200, 800, 12, 80, 'vertical');
-
-    // Secure rooms
-    this.addWall(2212, 600, 288, 12, 'metal');
-    this.addDoor(2350, 600, 60, 12, 'horizontal');
-    this.addWall(2212, 900, 288, 12, 'metal');
-    this.addDoor(2300, 900, 60, 12, 'horizontal');
-
-    // Safe room (heavily fortified)
-    this.addWall(2250, 650, 200, 15, 'metal');
-    this.addWall(2250, 650, 15, 200, 'metal');
-    this.addWall(2250, 850, 200, 15, 'metal');
-    this.addWall(2450, 650, 15, 200, 'metal');
-    this.addDoor(2250, 720, 15, 60, 'vertical');
-
-    // Central hall
-    this.addWall(1200, 415, 12, 400, 'drywall');
-    this.addDoor(1200, 550, 12, 80, 'vertical');
-    this.addWall(1800, 415, 12, 400, 'drywall');
-    this.addDoor(1800, 600, 12, 80, 'vertical');
-
-    // Ambassador's office (center top)
-    this.addWall(1212, 415, 588, 12, 'drywall');
-    this.addWall(1400, 500, 12, 300, 'drywall');
-    this.addWall(1600, 500, 12, 300, 'drywall');
-    this.addDoor(1400, 600, 12, 60, 'vertical');
-    this.addDoor(1600, 650, 12, 60, 'vertical');
-    // Large windows
-    this.addWall(1300, 427, 100, 8, 'glass');
-    this.addWall(1600, 427, 100, 8, 'glass');
-
-    // Guard posts
-    this.addWall(300, 300, 100, 15, 'concrete');
-    this.addWall(300, 300, 15, 100, 'concrete');
-    this.addWall(300, 400, 100, 15, 'concrete');
-    this.addWall(400, 300, 15, 100, 'concrete');
-    this.addDoor(400, 330, 15, 50, 'vertical');
-
-    this.addWall(2600, 300, 100, 15, 'concrete');
-    this.addWall(2600, 300, 15, 100, 'concrete');
-    this.addWall(2600, 400, 100, 15, 'concrete');
-    this.addWall(2700, 300, 15, 100, 'concrete');
-    this.addDoor(2600, 330, 15, 50, 'vertical');
-
-    // Garden area with cover
-    this.addWall(300, 1700, 150, 30, 'wood');
-    this.addWall(600, 1750, 30, 100, 'wood');
-    this.addWall(2400, 1700, 150, 30, 'wood');
-    this.addWall(2350, 1750, 30, 100, 'wood');
-
-    // Parking/vehicle barriers
-    this.addWall(800, 1800, 80, 40, 'concrete');
-    this.addWall(1000, 1800, 80, 40, 'concrete');
-    this.addWall(1900, 1800, 80, 40, 'concrete');
-    this.addWall(2100, 1800, 80, 40, 'concrete');
-
-    // Spawn points
-    this.spawnPoints.team = [
-      {x: 100, y: 1000}, {x: 100, y: 1050}, {x: 100, y: 1100}, {x: 150, y: 1050}
-    ];
-
-    this.spawnPoints.enemy = [
-      {x: 2350, y: 750}, // Safe room
-      {x: 2400, y: 500}, {x: 2300, y: 1100},
-      {x: 1500, y: 500}, // Ambassador office
-      {x: 650, y: 700}, {x: 650, y: 900},
-      {x: 1500, y: 1400}, {x: 1200, y: 1000},
-      {x: 350, y: 350}, {x: 2650, y: 350},
-      {x: 2700, y: 1800}
-    ];
-
-    this.objectives.push({x: 2350, y: 750, type: 'hostage', secured: false});
-    this.objectives.push({x: 1500, y: 480, type: 'intel', secured: false});
-    this.objectives.push({x: 650, y: 500, type: 'bomb', secured: false});
-  }
-
-  generateJungle() {
-    const W = CONFIG.MAP_WIDTH;
-    const H = CONFIG.MAP_HEIGHT;
-
-    // Outer boundary walls (thick jungle perimeter)
-    this.addWall(0, 0, W, 30, 'concrete');
-    this.addWall(0, H-30, W, 30, 'concrete');
-    this.addWall(0, 0, 30, H, 'concrete');
-    this.addWall(W-30, 0, 30, H, 'concrete');
-
-    // === CENTRAL OUTPOST BUILDING ===
-    // Main building structure
-    this.addWall(1200, 800, 400, 15, 'concrete');
-    this.addWall(1200, 1100, 400, 15, 'concrete');
-    this.addWall(1200, 800, 15, 315, 'concrete');
-    this.addWall(1600, 800, 15, 315, 'concrete');
-    this.addDoor(1350, 800, 80, 15, 'horizontal');
-    this.addDoor(1200, 920, 15, 60, 'vertical');
-    this.addDoor(1600, 920, 15, 60, 'vertical');
-
-    // Interior walls
-    this.addWall(1350, 815, 12, 140, 'drywall');
-    this.addDoor(1350, 870, 12, 50, 'vertical');
-    this.addWall(1450, 815, 12, 140, 'drywall');
-    this.addDoor(1450, 870, 12, 50, 'vertical');
-
-    // === SUPPLY DEPOT (Left side) ===
-    this.addWall(300, 500, 250, 12, 'metal');
-    this.addWall(300, 700, 250, 12, 'metal');
-    this.addWall(300, 500, 12, 212, 'metal');
-    this.addWall(550, 500, 12, 212, 'metal');
-    this.addDoor(400, 500, 60, 12, 'horizontal');
-    this.addDoor(400, 700, 60, 12, 'horizontal');
-
-    // === WATCH TOWER (Top right) ===
-    this.addWall(2400, 200, 200, 12, 'wood');
-    this.addWall(2400, 400, 200, 12, 'wood');
-    this.addWall(2400, 200, 12, 212, 'wood');
-    this.addWall(2600, 200, 12, 212, 'wood');
-    this.addDoor(2400, 280, 12, 60, 'vertical');
-
-    // === AMMO BUNKER (Bottom) ===
-    this.addWall(800, 1500, 300, 15, 'concrete');
-    this.addWall(800, 1700, 300, 15, 'concrete');
-    this.addWall(800, 1500, 15, 215, 'concrete');
-    this.addWall(1100, 1500, 15, 215, 'concrete');
-    this.addDoor(900, 1500, 80, 15, 'horizontal');
-
-    // === SCATTERED BARRIERS (Yellow construction barriers) ===
-    // These provide cover throughout the jungle paths
-    this.addWall(600, 300, 80, 15, 'wood');
-    this.addWall(900, 450, 15, 80, 'wood');
-    this.addWall(1800, 600, 100, 15, 'wood');
-    this.addWall(2100, 800, 15, 100, 'wood');
-    this.addWall(500, 1000, 80, 15, 'wood');
-    this.addWall(1600, 1400, 100, 15, 'wood');
-    this.addWall(2300, 1200, 15, 80, 'wood');
-    this.addWall(400, 1300, 15, 100, 'wood');
-    this.addWall(2500, 600, 80, 15, 'wood');
-    this.addWall(1100, 350, 15, 80, 'wood');
-
-    // === SUPPLY CRATES (Various sizes) ===
-    // Small crates throughout
-    this.addWall(350, 550, 40, 40, 'wood');
-    this.addWall(450, 620, 50, 35, 'wood');
-    this.addWall(500, 550, 35, 45, 'wood');
-
-    // Ammo crates near bunker
-    this.addWall(850, 1550, 45, 40, 'metal');
-    this.addWall(920, 1560, 50, 35, 'metal');
-    this.addWall(1000, 1550, 40, 45, 'metal');
-    this.addWall(850, 1620, 40, 40, 'metal');
-    this.addWall(920, 1630, 45, 35, 'metal');
-
-    // Health/supply crates
-    this.addWall(1250, 850, 50, 40, 'wood');
-    this.addWall(1320, 860, 45, 35, 'wood');
-    this.addWall(1500, 850, 40, 45, 'wood');
-    this.addWall(1520, 1020, 55, 40, 'wood');
-
-    // Random scattered crates
-    this.addWall(2450, 280, 50, 40, 'wood');
-    this.addWall(2520, 300, 40, 50, 'wood');
-    this.addWall(700, 800, 45, 40, 'wood');
-    this.addWall(2000, 1000, 50, 45, 'wood');
-    this.addWall(1800, 1600, 40, 40, 'wood');
-    this.addWall(2600, 1400, 55, 40, 'wood');
-
-    // === BODY ARMOR AND VESTS (small metal boxes) ===
-    this.addWall(2200, 500, 60, 45, 'metal');
-    this.addWall(2280, 550, 55, 40, 'metal');
-    this.addWall(1700, 900, 50, 50, 'metal');
-
-    // === DENSE VEGETATION AREAS ===
-    // These create visual density but are passable (decorations)
-
-    // Top left jungle cluster
-    for (let i = 0; i < 12; i++) {
-      const x = 80 + Math.random() * 400;
-      const y = 80 + Math.random() * 350;
-      this.addDecoration(x, y, 'bush', { scale: 0.8 + Math.random() * 0.6, variant: Math.floor(Math.random() * 3) });
-    }
-    for (let i = 0; i < 6; i++) {
-      const x = 100 + Math.random() * 350;
-      const y = 100 + Math.random() * 300;
-      this.addDecoration(x, y, 'tree', { scale: 0.9 + Math.random() * 0.4 });
-    }
-
-    // Right side jungle
-    for (let i = 0; i < 15; i++) {
-      const x = 2650 + Math.random() * 300;
-      const y = 500 + Math.random() * 1200;
-      this.addDecoration(x, y, 'bush', { scale: 0.7 + Math.random() * 0.6, variant: Math.floor(Math.random() * 3) });
-    }
-    for (let i = 0; i < 8; i++) {
-      const x = 2700 + Math.random() * 250;
-      const y = 600 + Math.random() * 1000;
-      this.addDecoration(x, y, 'tree', { scale: 0.8 + Math.random() * 0.5 });
-    }
-
-    // Bottom jungle
-    for (let i = 0; i < 18; i++) {
-      const x = 100 + Math.random() * 2600;
-      const y = 1800 + Math.random() * 250;
-      this.addDecoration(x, y, 'bush', { scale: 0.6 + Math.random() * 0.7, variant: Math.floor(Math.random() * 3) });
-    }
-    for (let i = 0; i < 10; i++) {
-      const x = 200 + Math.random() * 2400;
-      const y = 1850 + Math.random() * 200;
-      this.addDecoration(x, y, 'tree', { scale: 0.7 + Math.random() * 0.6 });
-    }
-
-    // Central scattered vegetation
-    for (let i = 0; i < 25; i++) {
-      const x = 600 + Math.random() * 1800;
-      const y = 400 + Math.random() * 1200;
-      // Avoid spawning in buildings
-      if ((x > 1180 && x < 1630 && y > 780 && y < 1120) ||
-          (x > 280 && x < 580 && y > 480 && y < 720) ||
-          (x > 780 && x < 1120 && y > 1480 && y < 1720)) continue;
-      this.addDecoration(x, y, 'fern', { scale: 0.5 + Math.random() * 0.5, variant: Math.floor(Math.random() * 2) });
-    }
-
-    // Add palm trees
-    for (let i = 0; i < 8; i++) {
-      const x = 100 + Math.random() * 2700;
-      const y = 100 + Math.random() * 1900;
-      if ((x > 1180 && x < 1630 && y > 780 && y < 1120) ||
-          (x > 280 && x < 580 && y > 480 && y < 720)) continue;
-      this.addDecoration(x, y, 'palm', { scale: 0.8 + Math.random() * 0.4 });
-    }
-
-    // Add logs (fallen trees)
-    this.addDecoration(700, 350, 'log', { rotation: 0.3, scale: 1.2 });
-    this.addDecoration(1900, 500, 'log', { rotation: -0.2, scale: 1.0 });
-    this.addDecoration(500, 1200, 'log', { rotation: 0.8, scale: 1.1 });
-    this.addDecoration(2300, 1500, 'log', { rotation: -0.5, scale: 0.9 });
-    this.addDecoration(1100, 650, 'log', { rotation: 0.1, scale: 1.3 });
-
-    // Add barrels
-    this.addDecoration(380, 580, 'barrel', { variant: 0 });
-    this.addDecoration(520, 640, 'barrel', { variant: 1 });
-    this.addDecoration(880, 1590, 'barrel', { variant: 0 });
-    this.addDecoration(1050, 1600, 'barrel', { variant: 1 });
-    this.addDecoration(2480, 350, 'barrel', { variant: 0 });
-    this.addDecoration(1750, 950, 'barrel', { variant: 1 });
-
-    // Add sandbag positions
-    this.addDecoration(950, 750, 'sandbag', { rotation: 0 });
-    this.addDecoration(1150, 1200, 'sandbag', { rotation: Math.PI / 4 });
-    this.addDecoration(2000, 700, 'sandbag', { rotation: -Math.PI / 6 });
-    this.addDecoration(600, 1100, 'sandbag', { rotation: Math.PI / 3 });
-
-    // === SPAWN POINTS ===
-    this.spawnPoints.team = [
-      {x: 150, y: 1950}, {x: 200, y: 1950}, {x: 150, y: 2000}, {x: 200, y: 2000}
-    ];
-
-    this.spawnPoints.enemy = [
-      // Main building
-      {x: 1300, y: 950}, {x: 1500, y: 950},
-      // Supply depot
-      {x: 420, y: 600},
-      // Watch tower
-      {x: 2500, y: 300},
-      // Bunker
-      {x: 950, y: 1600},
-      // Scattered patrol
-      {x: 1800, y: 500}, {x: 2200, y: 900},
-      {x: 800, y: 1200}, {x: 2400, y: 1300},
-      {x: 1500, y: 1500}, {x: 2700, y: 800},
-      {x: 600, y: 400}
-    ];
-
-    // === OBJECTIVES ===
-    this.objectives.push({x: 1400, y: 950, type: 'hostage', secured: false});
-    this.objectives.push({x: 950, y: 1600, type: 'intel', secured: false});
-    this.objectives.push({x: 2500, y: 300, type: 'bomb', secured: false});
-  }
-
-  generateRandom() {
-    const W = CONFIG.MAP_WIDTH;
-    const H = CONFIG.MAP_HEIGHT;
-
-    // Outer walls
-    this.addWall(0, 0, W, 20, 'concrete');
-    this.addWall(0, H-20, W, 20, 'concrete');
-    this.addWall(0, 0, 20, H, 'concrete');
-    this.addWall(W-20, 0, 20, H, 'concrete');
-
-    // Generate rooms using BSP (Binary Space Partitioning)
-    const rooms = [];
-    const minRoomSize = 200;
-    const maxRoomSize = 500;
-
-    // Recursive space partitioning
-    const partitions = [];
-    this.splitSpace(50, 50, W - 100, H - 100, partitions, minRoomSize * 2);
-
-    // Create rooms from partitions
-    for (const part of partitions) {
-      const padding = 30;
-      const roomW = part.w - padding * 2;
-      const roomH = part.h - padding * 2;
-
-      if (roomW > minRoomSize && roomH > minRoomSize) {
-        rooms.push({
-          x: part.x + padding,
-          y: part.y + padding,
-          w: roomW,
-          h: roomH
-        });
-      }
-    }
-
-    // Draw room walls and doors
-    const materials = ['concrete', 'drywall', 'drywall', 'drywall', 'metal'];
-
-    for (const room of rooms) {
-      const mat = materials[Math.floor(Math.random() * materials.length)];
-
-      // Top wall with possible door
-      if (Math.random() > 0.3) {
-        const doorX = room.x + room.w * (0.3 + Math.random() * 0.4);
-        this.addWall(room.x, room.y, doorX - room.x - 30, 12, mat);
-        this.addDoor(doorX - 30, room.y, 60, 12, 'horizontal');
-        this.addWall(doorX + 30, room.y, room.x + room.w - doorX - 30, 12, mat);
-      } else {
-        this.addWall(room.x, room.y, room.w, 12, mat);
-      }
-
-      // Bottom wall with possible door
-      if (Math.random() > 0.3) {
-        const doorX = room.x + room.w * (0.3 + Math.random() * 0.4);
-        this.addWall(room.x, room.y + room.h, doorX - room.x - 30, 12, mat);
-        this.addDoor(doorX - 30, room.y + room.h, 60, 12, 'horizontal');
-        this.addWall(doorX + 30, room.y + room.h, room.x + room.w - doorX - 30, 12, mat);
-      } else {
-        this.addWall(room.x, room.y + room.h, room.w, 12, mat);
-      }
-
-      // Left wall with possible door
-      if (Math.random() > 0.3) {
-        const doorY = room.y + room.h * (0.3 + Math.random() * 0.4);
-        this.addWall(room.x, room.y, 12, doorY - room.y - 30, mat);
-        this.addDoor(room.x, doorY - 30, 12, 60, 'vertical');
-        this.addWall(room.x, doorY + 30, 12, room.y + room.h - doorY - 30, mat);
-      } else {
-        this.addWall(room.x, room.y, 12, room.h, mat);
-      }
-
-      // Right wall with possible door
-      if (Math.random() > 0.3) {
-        const doorY = room.y + room.h * (0.3 + Math.random() * 0.4);
-        this.addWall(room.x + room.w, room.y, 12, doorY - room.y - 30, mat);
-        this.addDoor(room.x + room.w, doorY - 30, 12, 60, 'vertical');
-        this.addWall(room.x + room.w, doorY + 30, 12, room.y + room.h - doorY - 30, mat);
-      } else {
-        this.addWall(room.x + room.w, room.y, 12, room.h, mat);
-      }
-
-      // Random interior elements
-      if (Math.random() > 0.5) {
-        const coverX = room.x + 50 + Math.random() * (room.w - 150);
-        const coverY = room.y + 50 + Math.random() * (room.h - 150);
-        this.addWall(coverX, coverY, 40 + Math.random() * 60, 15, 'wood');
-      }
-
-      // Sometimes add glass windows
-      if (Math.random() > 0.7) {
-        const side = Math.floor(Math.random() * 4);
-        if (side === 0) this.addWall(room.x + room.w * 0.3, room.y + 2, room.w * 0.4, 8, 'glass');
-        else if (side === 1) this.addWall(room.x + room.w * 0.3, room.y + room.h - 2, room.w * 0.4, 8, 'glass');
-        else if (side === 2) this.addWall(room.x + 2, room.y + room.h * 0.3, 8, room.h * 0.4, 'glass');
-        else this.addWall(room.x + room.w - 2, room.y + room.h * 0.3, 8, room.h * 0.4, 'glass');
-      }
-    }
-
-    // Add corridors between rooms
-    for (let i = 0; i < rooms.length - 1; i++) {
-      const r1 = rooms[i];
-      const r2 = rooms[i + 1];
-      const cx1 = r1.x + r1.w / 2;
-      const cy1 = r1.y + r1.h / 2;
-      const cx2 = r2.x + r2.w / 2;
-      const cy2 = r2.y + r2.h / 2;
-
-      // Sometimes add cover in corridors
-      if (Math.random() > 0.6) {
-        const midX = (cx1 + cx2) / 2;
-        const midY = (cy1 + cy2) / 2;
-        this.addWall(midX - 20, midY - 10, 40, 20, 'wood');
-      }
-    }
-
-    // Spawn team in bottom-left area
-    this.spawnPoints.team = [
-      {x: 80, y: 80}, {x: 140, y: 80}, {x: 80, y: 140}, {x: 140, y: 140}
-    ];
-
-    // Spawn enemies throughout the map
-    const enemyCount = 8 + Math.floor(Math.random() * 5);
-    for (let i = 0; i < enemyCount; i++) {
-      // Prefer spawning in rooms
-      if (rooms.length > 0 && Math.random() > 0.3) {
-        const room = rooms[Math.floor(Math.random() * rooms.length)];
-        this.spawnPoints.enemy.push({
-          x: room.x + 50 + Math.random() * (room.w - 100),
-          y: room.y + 50 + Math.random() * (room.h - 100)
-        });
-      } else {
-        this.spawnPoints.enemy.push({
-          x: W * 0.4 + Math.random() * (W * 0.5),
-          y: H * 0.3 + Math.random() * (H * 0.6)
-        });
-      }
-    }
-
-    // Place objectives in different areas
-    const objTypes = ['hostage', 'intel', 'bomb'];
-    for (let i = 0; i < 3; i++) {
-      if (rooms.length > i) {
-        const room = rooms[rooms.length - 1 - i];
-        this.objectives.push({
-          x: room.x + room.w / 2,
-          y: room.y + room.h / 2,
-          type: objTypes[i],
-          secured: false
-        });
-      } else {
-        this.objectives.push({
-          x: W * 0.6 + i * 200,
-          y: H * 0.5 + (Math.random() - 0.5) * 400,
-          type: objTypes[i],
-          secured: false
-        });
-      }
-    }
   }
 
   // BSP helper for random generation
@@ -3090,6 +2487,35 @@ class Level {
       ctx.strokeStyle = color.stroke;
       ctx.lineWidth = 2;
       ctx.stroke();
+    }
+  }
+
+  // Draw fog of war overlay - call this after drawing the level
+  drawFogOfWar(ctx, playerX, playerY, teammates = []) {
+    const gridSize = this.fogGridSize;
+
+    // Draw fog overlay for undiscovered areas
+    for (let cellY = 0; cellY < this.fogGridHeight; cellY++) {
+      for (let cellX = 0; cellX < this.fogGridWidth; cellX++) {
+        const x = cellX * gridSize;
+        const y = cellY * gridSize;
+        const discovered = this.discoveredGrid[cellY * this.fogGridWidth + cellX];
+        const currentlyVisible = this.isCurrentlyVisible(
+          x + gridSize / 2, y + gridSize / 2,
+          playerX, playerY, teammates
+        );
+
+        if (!discovered) {
+          // Completely dark (undiscovered)
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+          ctx.fillRect(x, y, gridSize, gridSize);
+        } else if (!currentlyVisible) {
+          // Discovered but not currently visible (fog)
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+          ctx.fillRect(x, y, gridSize, gridSize);
+        }
+        // If currently visible, don't draw any overlay
+      }
     }
   }
 }
@@ -4357,6 +3783,9 @@ class Game {
     // Update camera
     this.updateCamera();
 
+    // Update fog of war (reveal areas around player and teammates)
+    this.level.updateFogOfWar(this.player.x, this.player.y, this.teammates);
+
     // Update player
     this.player.update(this.mouseX, this.mouseY, this.level);
 
@@ -4771,8 +4200,21 @@ class Game {
     // Breach charges
     for (const bc of this.breachCharges) bc.draw(ctx);
 
-    // Enemies
-    for (const enemy of this.enemies) enemy.draw(ctx);
+    // Enemies (only draw if visible through fog of war)
+    for (const enemy of this.enemies) {
+      if (!enemy.isDead) {
+        const isVisible = this.level.isCurrentlyVisible(
+          enemy.x, enemy.y,
+          this.player.x, this.player.y,
+          this.teammates
+        );
+        if (isVisible) {
+          enemy.draw(ctx);
+        }
+      } else {
+        enemy.draw(ctx); // Always show dead enemies
+      }
+    }
 
     // Teammates
     for (const tm of this.teammates) tm.draw(ctx);
@@ -4782,6 +4224,9 @@ class Game {
 
     // Particles
     for (const p of this.particles) p.draw(ctx);
+
+    // Draw fog of war overlay
+    this.level.drawFogOfWar(ctx, this.player.x, this.player.y, this.teammates);
 
     ctx.restore();
 
@@ -4826,10 +4271,12 @@ class Game {
     ctx.lineWidth = 2;
     ctx.strokeRect(minimapX, minimapY, minimapWidth, minimapHeight);
 
-    // Draw walls
+    // Draw walls (only in discovered areas)
     ctx.fillStyle = '#666';
     for (const wall of this.level.walls) {
       if (wall.destroyed) continue;
+      // Only show if area is discovered
+      if (!this.level.isDiscovered(wall.x + wall.w/2, wall.y + wall.h/2)) continue;
       ctx.fillRect(
         minimapX + wall.x * scaleX,
         minimapY + wall.y * scaleY,
@@ -4838,9 +4285,11 @@ class Game {
       );
     }
 
-    // Draw doors
+    // Draw doors (only in discovered areas)
     for (const door of this.level.doors) {
       if (door.destroyed) continue;
+      // Only show if area is discovered
+      if (!this.level.isDiscovered(door.x + door.w/2, door.y + door.h/2)) continue;
       ctx.fillStyle = door.open ? '#333' : '#654321';
       ctx.fillRect(
         minimapX + door.x * scaleX,
@@ -4850,9 +4299,11 @@ class Game {
       );
     }
 
-    // Draw objectives
+    // Draw objectives (only in discovered areas)
     for (const obj of this.level.objectives) {
       if (obj.secured) continue;
+      // Only show if area is discovered
+      if (!this.level.isDiscovered(obj.x, obj.y)) continue;
       const colors = { hostage: '#ffff00', intel: '#00ff00', bomb: '#ff0000' };
       ctx.fillStyle = colors[obj.type] || '#ffff00';
       ctx.beginPath();
@@ -4860,10 +4311,17 @@ class Game {
       ctx.fill();
     }
 
-    // Draw enemies (red dots)
+    // Draw enemies (red dots) - only if currently visible
     ctx.fillStyle = '#ff0000';
     for (const enemy of this.enemies) {
       if (enemy.isDead) continue;
+      // Only show enemies in currently visible areas
+      const isVisible = this.level.isCurrentlyVisible(
+        enemy.x, enemy.y,
+        this.player.x, this.player.y,
+        this.teammates
+      );
+      if (!isVisible) continue;
       ctx.beginPath();
       ctx.arc(minimapX + enemy.x * scaleX, minimapY + enemy.y * scaleY, 2, 0, Math.PI * 2);
       ctx.fill();
@@ -4883,6 +4341,25 @@ class Game {
     ctx.beginPath();
     ctx.arc(minimapX + this.player.x * scaleX, minimapY + this.player.y * scaleY, 3, 0, Math.PI * 2);
     ctx.fill();
+
+    // Draw fog of war overlay on minimap
+    const fogGridSize = this.level.fogGridSize;
+    const fogScaleX = minimapWidth / CONFIG.MAP_WIDTH;
+    const fogScaleY = minimapHeight / CONFIG.MAP_HEIGHT;
+    for (let cellY = 0; cellY < this.level.fogGridHeight; cellY++) {
+      for (let cellX = 0; cellX < this.level.fogGridWidth; cellX++) {
+        const discovered = this.level.discoveredGrid[cellY * this.level.fogGridWidth + cellX];
+        if (!discovered) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+          ctx.fillRect(
+            minimapX + cellX * fogGridSize * fogScaleX,
+            minimapY + cellY * fogGridSize * fogScaleY,
+            fogGridSize * fogScaleX + 1,
+            fogGridSize * fogScaleY + 1
+          );
+        }
+      }
+    }
 
     // Draw viewport rectangle
     ctx.strokeStyle = '#ffffff44';
