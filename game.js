@@ -177,6 +177,306 @@ const CONFIG = {
 };
 
 // =============================================================================
+// MULTIPLAYER MANAGER
+// =============================================================================
+
+class MultiplayerManager {
+  constructor() {
+    this.ws = null;
+    this.playerId = null;
+    this.playerName = 'Player';
+    this.roomCode = null;
+    this.roomId = null;
+    this.isHost = false;
+    this.isConnected = false;
+    this.isInRoom = false;
+    this.players = [];
+    this.selectedMap = 'compound';
+
+    // Callbacks
+    this.onConnected = null;
+    this.onDisconnected = null;
+    this.onRoomCreated = null;
+    this.onRoomJoined = null;
+    this.onRoomLeft = null;
+    this.onPlayerJoined = null;
+    this.onPlayerLeft = null;
+    this.onGameStart = null;
+    this.onGameUpdate = null;
+    this.onError = null;
+
+    // Game state sync
+    this.lastSentState = null;
+    this.remotePlayerStates = new Map();
+    this.syncInterval = null;
+    this.SYNC_RATE = 50; // ms between syncs (20 updates/sec)
+  }
+
+  connect() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}`;
+
+      this.ws = new WebSocket(wsUrl);
+
+      this.ws.onopen = () => {
+        console.log('WebSocket connected');
+        this.isConnected = true;
+        if (this.onConnected) this.onConnected();
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          this.handleMessage(message);
+          if (message.type === 'connected') {
+            resolve();
+          }
+        } catch (e) {
+          console.error('Failed to parse message:', e);
+        }
+      };
+
+      this.ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        this.isConnected = false;
+        this.isInRoom = false;
+        this.stopSync();
+        if (this.onDisconnected) this.onDisconnected();
+      };
+
+      this.ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        reject(error);
+      };
+
+      // Timeout for connection
+      setTimeout(() => {
+        if (!this.isConnected) {
+          reject(new Error('Connection timeout'));
+        }
+      }, 5000);
+    });
+  }
+
+  disconnect() {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    this.isConnected = false;
+    this.isInRoom = false;
+    this.stopSync();
+  }
+
+  send(message) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+    }
+  }
+
+  handleMessage(message) {
+    switch (message.type) {
+      case 'connected':
+        this.playerId = message.playerId;
+        console.log('Assigned player ID:', this.playerId);
+        break;
+
+      case 'room_created':
+        this.roomCode = message.roomCode;
+        this.roomId = message.roomId;
+        this.isHost = true;
+        this.isInRoom = true;
+        this.players = message.players;
+        if (this.onRoomCreated) this.onRoomCreated(message);
+        break;
+
+      case 'room_joined':
+        this.roomCode = message.roomCode;
+        this.roomId = message.roomId;
+        this.isHost = false;
+        this.isInRoom = true;
+        this.players = message.players;
+        if (this.onRoomJoined) this.onRoomJoined(message);
+        break;
+
+      case 'player_joined':
+        this.players = message.players;
+        if (this.onPlayerJoined) this.onPlayerJoined(message);
+        break;
+
+      case 'player_left':
+        this.players = message.players;
+        if (message.newHostId === this.playerId) {
+          this.isHost = true;
+        }
+        if (this.onPlayerLeft) this.onPlayerLeft(message);
+        break;
+
+      case 'room_left':
+        this.roomCode = null;
+        this.roomId = null;
+        this.isHost = false;
+        this.isInRoom = false;
+        this.players = [];
+        this.stopSync();
+        if (this.onRoomLeft) this.onRoomLeft(message);
+        break;
+
+      case 'game_start':
+        if (this.onGameStart) this.onGameStart(message);
+        break;
+
+      case 'game_update':
+        this.remotePlayerStates.set(message.senderId, message.data);
+        if (this.onGameUpdate) this.onGameUpdate(message);
+        break;
+
+      case 'error':
+        console.error('Server error:', message.message);
+        if (this.onError) this.onError(message);
+        break;
+    }
+  }
+
+  createRoom(playerName) {
+    this.playerName = playerName;
+    this.send({
+      type: 'create_room',
+      playerName: playerName
+    });
+  }
+
+  joinRoom(roomCode, playerName) {
+    this.playerName = playerName;
+    this.send({
+      type: 'join_room',
+      roomCode: roomCode.toUpperCase(),
+      playerName: playerName
+    });
+  }
+
+  leaveRoom() {
+    this.send({ type: 'leave_room' });
+    this.stopSync();
+  }
+
+  startGame(mapType) {
+    if (!this.isHost) return;
+    this.send({
+      type: 'start_game',
+      mapType: mapType,
+      aiCount: Math.max(0, 4 - this.players.length)
+    });
+  }
+
+  // Start syncing player state
+  startSync(game) {
+    if (this.syncInterval) return;
+
+    this.syncInterval = setInterval(() => {
+      if (game.player && game.isRunning) {
+        this.sendPlayerState(game);
+      }
+    }, this.SYNC_RATE);
+  }
+
+  stopSync() {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = null;
+    }
+  }
+
+  sendPlayerState(game) {
+    const player = game.player;
+    if (!player) return;
+
+    const state = {
+      x: Math.round(player.x * 10) / 10,
+      y: Math.round(player.y * 10) / 10,
+      angle: Math.round(player.angle * 100) / 100,
+      hp: Math.round(player.hp),
+      isDead: player.isDead,
+      stance: player.stance,
+      lean: Math.round(player.lean * 10) / 10,
+      isFiring: player.isFiring,
+      isReloading: player.isReloading,
+      currentWeapon: player.currentWeapon,
+      muzzleFlash: player.muzzleFlash
+    };
+
+    // Only send if state has changed significantly
+    if (this.hasStateChanged(state)) {
+      this.send({
+        type: 'game_update',
+        data: state
+      });
+      this.lastSentState = state;
+    }
+  }
+
+  hasStateChanged(newState) {
+    if (!this.lastSentState) return true;
+
+    const posThreshold = 1;
+    const angleThreshold = 0.05;
+
+    return Math.abs(newState.x - this.lastSentState.x) > posThreshold ||
+           Math.abs(newState.y - this.lastSentState.y) > posThreshold ||
+           Math.abs(newState.angle - this.lastSentState.angle) > angleThreshold ||
+           newState.hp !== this.lastSentState.hp ||
+           newState.isDead !== this.lastSentState.isDead ||
+           newState.stance !== this.lastSentState.stance ||
+           newState.isFiring !== this.lastSentState.isFiring ||
+           newState.muzzleFlash !== this.lastSentState.muzzleFlash;
+  }
+
+  // Send bullet fired event
+  sendBulletFired(bullet) {
+    this.send({
+      type: 'game_update',
+      data: {
+        event: 'bullet_fired',
+        x: bullet.x,
+        y: bullet.y,
+        angle: bullet.angle,
+        weaponType: bullet.weaponType,
+        shooterId: this.playerId
+      }
+    });
+  }
+
+  // Send grenade thrown event
+  sendGrenadeThrown(grenade) {
+    this.send({
+      type: 'game_update',
+      data: {
+        event: 'grenade_thrown',
+        x: grenade.x,
+        y: grenade.y,
+        targetX: grenade.targetX,
+        targetY: grenade.targetY,
+        type: grenade.type,
+        throwerId: this.playerId
+      }
+    });
+  }
+
+  // Get remote player state with interpolation
+  getRemotePlayerState(playerId) {
+    return this.remotePlayerStates.get(playerId);
+  }
+}
+
+// Global multiplayer instance
+const multiplayer = new MultiplayerManager();
+
+// =============================================================================
 // SOUND SYSTEM
 // =============================================================================
 
@@ -2351,8 +2651,15 @@ class Player {
 
     this.isLocal = isLocal;
     this.isAI = false;
+    this.isRemote = false; // For multiplayer remote players
+    this.networkId = null; // Server-assigned player ID
     this.team = 'blue';
     this.name = isLocal ? 'You' : 'Teammate';
+
+    // Interpolation targets (for remote players)
+    this.targetX = undefined;
+    this.targetY = undefined;
+    this.targetAngle = undefined;
 
     // Health
     this.hp = CONFIG.PLAYER_MAX_HP;
@@ -3032,6 +3339,9 @@ class Game {
     this.currentFormation = 'closeCombat';
     this.formationKeys = Object.keys(CONFIG.FORMATIONS);
 
+    // Soldier selection - index into teammates array
+    this.controlledSoldierIndex = 0;
+
     // Camera system
     this.cameraX = 0;
     this.cameraY = 0;
@@ -3051,7 +3361,13 @@ class Game {
     this.flashOverlay = 0;
     this.screenShake = 0;
 
+    // Multiplayer state
+    this.isMultiplayer = false;
+    this.remotePlayers = new Map(); // Map of playerId -> Player object
+    this.playerIdToEntity = new Map(); // Map server playerId to local Player objects
+
     this.bindEvents();
+    this.bindMultiplayerEvents();
     this.showMenu();
   }
 
@@ -3064,13 +3380,21 @@ class Game {
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     this.canvas.addEventListener('wheel', (e) => this.handleMouseWheel(e));
 
+    // Main menu buttons
+    document.getElementById('singleplayer-btn')?.addEventListener('click', () => this.showSingleplayerMenu());
+    document.getElementById('multiplayer-btn')?.addEventListener('click', () => this.showMultiplayerMenu());
+
+    // Single player menu
     document.getElementById('start-btn')?.addEventListener('click', () => this.startMission());
+    document.getElementById('back-to-main')?.addEventListener('click', () => this.showMainMenu());
+
+    // Sound toggle
     document.getElementById('sound-toggle')?.addEventListener('click', () => {
       const enabled = sound.toggle();
       document.getElementById('sound-toggle').textContent = `Sound: ${enabled ? 'ON' : 'OFF'}`;
     });
 
-    // Map selection buttons
+    // Map selection buttons (single player)
     document.querySelectorAll('.map-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('selected'));
@@ -3080,8 +3404,200 @@ class Game {
       });
     });
 
+    // Map selection buttons (multiplayer)
+    document.querySelectorAll('.map-btn-mp').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        if (!multiplayer.isHost) return; // Only host can change map
+        document.querySelectorAll('.map-btn-mp').forEach(b => b.classList.remove('selected'));
+        e.target.classList.add('selected');
+        this.selectedMap = e.target.dataset.map;
+      });
+    });
+
     // Initialize map description
     this.updateMapDescription();
+  }
+
+  bindMultiplayerEvents() {
+    // Multiplayer menu buttons
+    document.getElementById('mp-back-to-main')?.addEventListener('click', () => this.showMainMenu());
+    document.getElementById('create-room-btn')?.addEventListener('click', () => this.createRoom());
+    document.getElementById('join-room-btn')?.addEventListener('click', () => this.joinRoom());
+    document.getElementById('leave-room-btn')?.addEventListener('click', () => this.leaveRoom());
+    document.getElementById('start-mp-game-btn')?.addEventListener('click', () => this.startMultiplayerGame());
+
+    // Setup multiplayer callbacks
+    multiplayer.onConnected = () => {
+      this.updateMpStatus('Connected to server');
+    };
+
+    multiplayer.onDisconnected = () => {
+      this.updateMpStatus('Disconnected from server');
+      if (this.isMultiplayer && this.isRunning) {
+        // Handle disconnect during game
+        this.isMultiplayer = false;
+      }
+    };
+
+    multiplayer.onRoomCreated = (data) => {
+      this.showLobby(data);
+    };
+
+    multiplayer.onRoomJoined = (data) => {
+      this.showLobby(data);
+    };
+
+    multiplayer.onPlayerJoined = (data) => {
+      this.updateLobbyPlayers(data.players);
+    };
+
+    multiplayer.onPlayerLeft = (data) => {
+      this.updateLobbyPlayers(data.players);
+      // Update host status
+      if (multiplayer.isHost) {
+        document.getElementById('start-mp-game-btn').style.display = 'block';
+        document.getElementById('waiting-text').style.display = 'none';
+      }
+      // Handle player leaving during game
+      if (this.isRunning && this.isMultiplayer) {
+        this.handleRemotePlayerLeft(data);
+      }
+    };
+
+    multiplayer.onRoomLeft = () => {
+      this.showMultiplayerMenu();
+    };
+
+    multiplayer.onGameStart = (data) => {
+      this.startMultiplayerMission(data);
+    };
+
+    multiplayer.onGameUpdate = (data) => {
+      this.handleGameUpdate(data);
+    };
+
+    multiplayer.onError = (data) => {
+      this.updateMpStatus(data.message);
+    };
+  }
+
+  showMainMenu() {
+    document.getElementById('main-menu-buttons').style.display = 'flex';
+    document.getElementById('singleplayer-menu').style.display = 'none';
+    document.getElementById('multiplayer-menu').style.display = 'none';
+    document.getElementById('lobby-screen').style.display = 'none';
+  }
+
+  showSingleplayerMenu() {
+    document.getElementById('main-menu-buttons').style.display = 'none';
+    document.getElementById('singleplayer-menu').style.display = 'block';
+    document.getElementById('multiplayer-menu').style.display = 'none';
+    document.getElementById('lobby-screen').style.display = 'none';
+  }
+
+  showMultiplayerMenu() {
+    document.getElementById('main-menu-buttons').style.display = 'none';
+    document.getElementById('singleplayer-menu').style.display = 'none';
+    document.getElementById('multiplayer-menu').style.display = 'block';
+    document.getElementById('lobby-screen').style.display = 'none';
+    this.updateMpStatus('');
+
+    // Connect to server if not connected
+    if (!multiplayer.isConnected) {
+      this.updateMpStatus('Connecting...');
+      multiplayer.connect()
+        .then(() => this.updateMpStatus('Connected! Create or join a room.'))
+        .catch(() => this.updateMpStatus('Failed to connect to server'));
+    }
+  }
+
+  showLobby(data) {
+    document.getElementById('main-menu-buttons').style.display = 'none';
+    document.getElementById('singleplayer-menu').style.display = 'none';
+    document.getElementById('multiplayer-menu').style.display = 'none';
+    document.getElementById('lobby-screen').style.display = 'block';
+
+    document.getElementById('lobby-room-code').textContent = data.roomCode;
+    this.updateLobbyPlayers(data.players);
+
+    // Show/hide start button based on host status
+    if (multiplayer.isHost) {
+      document.getElementById('start-mp-game-btn').style.display = 'block';
+      document.getElementById('waiting-text').style.display = 'none';
+      // Enable map selection for host
+      document.querySelectorAll('.map-btn-mp').forEach(btn => btn.disabled = false);
+    } else {
+      document.getElementById('start-mp-game-btn').style.display = 'none';
+      document.getElementById('waiting-text').style.display = 'block';
+      // Disable map selection for non-host
+      document.querySelectorAll('.map-btn-mp').forEach(btn => btn.disabled = true);
+    }
+  }
+
+  updateLobbyPlayers(players) {
+    const list = document.getElementById('lobby-players');
+    const count = document.getElementById('player-count');
+    list.innerHTML = '';
+    count.textContent = players.length;
+
+    players.forEach(p => {
+      const li = document.createElement('li');
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'player-name';
+      nameSpan.textContent = p.name;
+      li.appendChild(nameSpan);
+
+      const badges = document.createElement('span');
+      if (p.isHost) {
+        const hostBadge = document.createElement('span');
+        hostBadge.className = 'player-host';
+        hostBadge.textContent = 'HOST';
+        badges.appendChild(hostBadge);
+      }
+      if (p.id === multiplayer.playerId) {
+        const youBadge = document.createElement('span');
+        youBadge.className = 'player-you';
+        youBadge.textContent = 'YOU';
+        youBadge.style.marginLeft = '5px';
+        badges.appendChild(youBadge);
+      }
+      li.appendChild(badges);
+      list.appendChild(li);
+    });
+  }
+
+  updateMpStatus(message) {
+    const statusEl = document.getElementById('mp-status');
+    if (statusEl) statusEl.textContent = message;
+  }
+
+  createRoom() {
+    const nameInput = document.getElementById('player-name');
+    const playerName = nameInput?.value.trim() || 'Player';
+    multiplayer.createRoom(playerName);
+  }
+
+  joinRoom() {
+    const nameInput = document.getElementById('player-name');
+    const codeInput = document.getElementById('room-code-input');
+    const playerName = nameInput?.value.trim() || 'Player';
+    const roomCode = codeInput?.value.trim().toUpperCase() || '';
+
+    if (roomCode.length !== 4) {
+      this.updateMpStatus('Please enter a 4-character room code');
+      return;
+    }
+
+    multiplayer.joinRoom(roomCode, playerName);
+  }
+
+  leaveRoom() {
+    multiplayer.leaveRoom();
+  }
+
+  startMultiplayerGame() {
+    if (!multiplayer.isHost) return;
+    multiplayer.startGame(this.selectedMap);
   }
 
   updateMapDescription() {
@@ -3095,11 +3611,25 @@ class Game {
     document.getElementById('menu-screen').style.display = 'flex';
     document.getElementById('game-screen').style.display = 'none';
     document.getElementById('hud').style.display = 'none';
+
+    // Reset multiplayer state
+    this.isMultiplayer = false;
+    this.remotePlayers.clear();
+    this.playerIdToEntity.clear();
+    multiplayer.stopSync();
+
+    // Show main menu
+    this.showMainMenu();
   }
 
   startMission() {
     sound.init();
     sound.resume();
+
+    // Ensure single player mode
+    this.isMultiplayer = false;
+    this.remotePlayers.clear();
+    this.playerIdToEntity.clear();
 
     document.getElementById('menu-screen').style.display = 'none';
     document.getElementById('game-screen').style.display = 'block';
@@ -3144,6 +3674,180 @@ class Game {
     this.isRunning = true;
 
     this.gameLoop();
+  }
+
+  startMultiplayerMission(data) {
+    sound.init();
+    sound.resume();
+
+    this.isMultiplayer = true;
+
+    document.getElementById('menu-screen').style.display = 'none';
+    document.getElementById('game-screen').style.display = 'block';
+    document.getElementById('hud').style.display = 'block';
+
+    // Use map type from server (host's selection)
+    const mapType = data.mapType || this.selectedMap;
+
+    // Create level with selected map type (from host)
+    this.level = new Level(mapType);
+
+    // Reset camera to starting position
+    this.cameraX = 0;
+    this.cameraY = 0;
+
+    // Find this player's spawn index
+    const myPlayerIndex = data.players.findIndex(p => p.id === multiplayer.playerId);
+
+    // Spawn all players
+    this.teammates = [];
+    this.remotePlayers.clear();
+    this.playerIdToEntity.clear();
+
+    for (let i = 0; i < data.players.length; i++) {
+      const playerData = data.players[i];
+      const spawn = this.level.spawnPoints.team[i] || this.level.spawnPoints.team[0];
+      const isLocal = playerData.id === multiplayer.playerId;
+
+      const player = new Player(spawn.x, spawn.y, isLocal);
+      player.name = playerData.name;
+      player.networkId = playerData.id;
+      player.isAI = false;
+      player.isRemote = !isLocal;
+
+      if (isLocal) {
+        this.player = player;
+        this.controlledSoldierIndex = i;
+      } else {
+        this.remotePlayers.set(playerData.id, player);
+      }
+
+      this.teammates.push(player);
+      this.playerIdToEntity.set(playerData.id, player);
+    }
+
+    // Spawn AI teammates to fill remaining slots
+    const aiCount = data.aiCount || 0;
+    for (let i = 0; i < aiCount && this.teammates.length < 4; i++) {
+      const spawnIndex = this.teammates.length;
+      const sp = this.level.spawnPoints.team[spawnIndex] || this.level.spawnPoints.team[0];
+      const aiTeammate = new Player(sp.x, sp.y, false);
+      aiTeammate.name = ['Alpha', 'Bravo', 'Charlie', 'Delta'][spawnIndex] || `AI ${i+1}`;
+      aiTeammate.isAI = true;
+      this.teammates.push(aiTeammate);
+    }
+
+    // Spawn enemies
+    this.enemies = [];
+    for (const sp of this.level.spawnPoints.enemy) {
+      this.enemies.push(new Enemy(sp.x, sp.y));
+    }
+
+    this.bullets = [];
+    this.grenades = [];
+    this.particles = [];
+    this.shellCasings = [];
+    this.smokeClouds = [];
+    this.breachCharges = [];
+
+    this.missionComplete = false;
+    this.missionFailed = false;
+    this.isRunning = true;
+
+    // Start syncing player state
+    multiplayer.startSync(this);
+
+    this.gameLoop();
+  }
+
+  handleGameUpdate(data) {
+    if (!this.isRunning || !this.isMultiplayer) return;
+
+    const senderId = data.senderId;
+    const state = data.data;
+
+    // Handle events (bullets, grenades)
+    if (state.event) {
+      switch (state.event) {
+        case 'bullet_fired':
+          this.handleRemoteBullet(state);
+          break;
+        case 'grenade_thrown':
+          this.handleRemoteGrenade(state);
+          break;
+      }
+      return;
+    }
+
+    // Update remote player state
+    const remotePlayer = this.remotePlayers.get(senderId);
+    if (remotePlayer) {
+      // Interpolate position for smooth movement
+      remotePlayer.targetX = state.x;
+      remotePlayer.targetY = state.y;
+      remotePlayer.targetAngle = state.angle;
+
+      // Immediate state updates
+      remotePlayer.hp = state.hp;
+      remotePlayer.isDead = state.isDead;
+      remotePlayer.stance = state.stance;
+      remotePlayer.lean = state.lean;
+      remotePlayer.isFiring = state.isFiring;
+      remotePlayer.isReloading = state.isReloading;
+      remotePlayer.currentWeapon = state.currentWeapon;
+      remotePlayer.muzzleFlash = state.muzzleFlash;
+    }
+  }
+
+  handleRemoteBullet(state) {
+    // Create bullet from remote player
+    const weapon = CONFIG.WEAPONS[state.weaponType] || CONFIG.WEAPONS.rifle;
+    const bullet = new Bullet(state.x, state.y, state.angle, weapon, null);
+    bullet.isRemote = true;
+    this.bullets.push(bullet);
+    sound.play(weapon.sound, state.x, state.y);
+  }
+
+  handleRemoteGrenade(state) {
+    // Create grenade from remote player
+    const grenade = new Grenade(state.x, state.y, state.targetX, state.targetY, state.type, null);
+    grenade.isRemote = true;
+    this.grenades.push(grenade);
+  }
+
+  handleRemotePlayerLeft(data) {
+    // Find and remove the disconnected player
+    for (const [playerId, player] of this.remotePlayers) {
+      if (!data.players.some(p => p.id === playerId)) {
+        // Player left - make them an AI or remove them
+        player.isAI = true;
+        player.isRemote = false;
+        player.name = player.name + ' (DC)';
+        this.remotePlayers.delete(playerId);
+      }
+    }
+  }
+
+  updateRemotePlayers() {
+    // Interpolate remote player positions
+    for (const remotePlayer of this.remotePlayers.values()) {
+      if (remotePlayer.isDead) continue;
+
+      // Smooth position interpolation
+      if (remotePlayer.targetX !== undefined) {
+        remotePlayer.x = utils.lerp(remotePlayer.x, remotePlayer.targetX, 0.3);
+        remotePlayer.y = utils.lerp(remotePlayer.y, remotePlayer.targetY, 0.3);
+      }
+
+      // Smooth angle interpolation
+      if (remotePlayer.targetAngle !== undefined) {
+        // Handle angle wrapping
+        let angleDiff = remotePlayer.targetAngle - remotePlayer.angle;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        remotePlayer.angle += angleDiff * 0.3;
+      }
+    }
   }
 
   gameLoop() {
@@ -3198,6 +3902,11 @@ class Game {
       if (tm.isAI && !tm.isDead) {
         this.updateAITeammate(tm, i);
       }
+    }
+
+    // Update remote players (multiplayer)
+    if (this.isMultiplayer) {
+      this.updateRemotePlayers();
     }
 
     // Update enemies
@@ -3341,6 +4050,70 @@ class Game {
     return CONFIG.FORMATIONS[this.currentFormation];
   }
 
+  switchToSoldier(index) {
+    // Validate index
+    if (index < 0 || index >= this.teammates.length) return false;
+
+    const targetSoldier = this.teammates[index];
+
+    // Can't switch to dead soldiers
+    if (targetSoldier.isDead) return false;
+
+    // Already controlling this soldier
+    if (index === this.controlledSoldierIndex) return false;
+
+    // Make current player an AI
+    const currentSoldier = this.teammates[this.controlledSoldierIndex];
+    currentSoldier.isLocal = false;
+    currentSoldier.isAI = true;
+    // Clear movement inputs
+    currentSoldier.moveUp = false;
+    currentSoldier.moveDown = false;
+    currentSoldier.moveLeft = false;
+    currentSoldier.moveRight = false;
+    currentSoldier.isFiring = false;
+    currentSoldier.moveTargetX = null;
+    currentSoldier.moveTargetY = null;
+
+    // Make target soldier player-controlled
+    targetSoldier.isLocal = true;
+    targetSoldier.isAI = false;
+
+    // Update references
+    this.controlledSoldierIndex = index;
+    this.player = targetSoldier;
+
+    return true;
+  }
+
+  cycleSoldier(direction = 1) {
+    // Find next alive soldier
+    const count = this.teammates.length;
+    let nextIndex = this.controlledSoldierIndex;
+
+    for (let i = 0; i < count; i++) {
+      nextIndex = (nextIndex + direction + count) % count;
+      if (!this.teammates[nextIndex].isDead) {
+        return this.switchToSoldier(nextIndex);
+      }
+    }
+    return false;
+  }
+
+  selectSoldierAtPosition(worldX, worldY) {
+    // Check if clicking on any teammate
+    for (let i = 0; i < this.teammates.length; i++) {
+      const tm = this.teammates[i];
+      if (tm.isDead) continue;
+
+      const dist = utils.distance(worldX, worldY, tm.x, tm.y);
+      if (dist <= tm.radius + 5) { // Small tolerance for easier clicking
+        return this.switchToSoldier(i);
+      }
+    }
+    return false;
+  }
+
   handleGrenadeExplosion(grenade) {
     const x = grenade.x;
     const y = grenade.y;
@@ -3444,11 +4217,26 @@ class Game {
     // All enemies dead = win
     if (this.enemies.every(e => e.isDead)) {
       this.missionComplete = true;
+      if (this.isMultiplayer) {
+        multiplayer.stopSync();
+      }
     }
 
-    // Player dead = lose
-    if (this.player.isDead) {
-      this.missionFailed = true;
+    // Check for mission failure
+    if (this.isMultiplayer) {
+      // In multiplayer, fail only if all human players are dead
+      const allHumansDead = this.teammates
+        .filter(t => !t.isAI)
+        .every(t => t.isDead);
+      if (allHumansDead) {
+        this.missionFailed = true;
+        multiplayer.stopSync();
+      }
+    } else {
+      // Single player - fail if player is dead
+      if (this.player.isDead) {
+        this.missionFailed = true;
+      }
     }
   }
 
@@ -3644,7 +4432,8 @@ class Game {
 
     ctx.font = '20px Arial';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('Press R to restart', CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2 + 50);
+    const restartText = this.isMultiplayer ? 'Press R to return to menu' : 'Press R to restart';
+    ctx.fillText(restartText, CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2 + 50);
   }
 
   handleKeyDown(e) {
@@ -3666,7 +4455,12 @@ class Game {
       case 'e': this.player.targetLean = 1; break;
       case 'r':
         if (this.missionComplete || this.missionFailed) {
-          this.startMission();
+          // Go back to menu on restart
+          this.isRunning = false;
+          if (this.isMultiplayer) {
+            multiplayer.leaveRoom();
+          }
+          this.showMenu();
         } else {
           this.player.reload();
         }
@@ -3692,7 +4486,18 @@ class Game {
         // Cycle team formation
         this.cycleFormation();
         break;
+      case 'tab':
+        // Cycle through soldiers
+        e.preventDefault();
+        this.cycleSoldier(e.shiftKey ? -1 : 1);
+        break;
     }
+
+    // Handle F1-F4 for direct soldier selection (not lowercase)
+    if (e.key === 'F1') { e.preventDefault(); this.switchToSoldier(0); }
+    if (e.key === 'F2') { e.preventDefault(); this.switchToSoldier(1); }
+    if (e.key === 'F3') { e.preventDefault(); this.switchToSoldier(2); }
+    if (e.key === 'F4') { e.preventDefault(); this.switchToSoldier(3); }
   }
 
   handleKeyUp(e) {

@@ -15,21 +15,75 @@
         <p class="subtitle">TACTICAL BREACH</p>
         <p class="tagline">One Room. One Moment. One Shot.</p>
 
-        <div class="map-selection">
-          <h3>SELECT MAP</h3>
-          <div class="map-buttons">
-            <button class="map-btn selected" data-map="compound">Military Compound</button>
-            <button class="map-btn" data-map="warehouse">Warehouse</button>
-            <button class="map-btn" data-map="office">Office Complex</button>
-            <button class="map-btn" data-map="embassy">Embassy</button>
-            <button class="map-btn" data-map="random">Random Generated</button>
-          </div>
-          <p id="map-description" class="map-desc">Large outdoor facility with multiple buildings</p>
+        <!-- Main Menu Buttons -->
+        <div id="main-menu-buttons" class="menu-section">
+          <button id="singleplayer-btn" class="btn-primary">SINGLE PLAYER</button>
+          <button id="multiplayer-btn" class="btn-primary">MULTIPLAYER</button>
+          <button id="sound-toggle" class="btn-secondary">Sound: ON</button>
         </div>
 
-        <div class="menu-section">
-          <button id="start-btn" class="btn-primary">BEGIN MISSION</button>
-          <button id="sound-toggle" class="btn-secondary">Sound: ON</button>
+        <!-- Single Player Options (hidden by default) -->
+        <div id="singleplayer-menu" class="submenu" style="display: none;">
+          <div class="map-selection">
+            <h3>SELECT MAP</h3>
+            <div class="map-buttons">
+              <button class="map-btn selected" data-map="compound">Military Compound</button>
+              <button class="map-btn" data-map="warehouse">Warehouse</button>
+              <button class="map-btn" data-map="office">Office Complex</button>
+              <button class="map-btn" data-map="embassy">Embassy</button>
+              <button class="map-btn" data-map="random">Random Generated</button>
+            </div>
+            <p id="map-description" class="map-desc">Large outdoor facility with multiple buildings</p>
+          </div>
+          <div class="menu-section">
+            <button id="start-btn" class="btn-primary">BEGIN MISSION</button>
+            <button id="back-to-main" class="btn-secondary">BACK</button>
+          </div>
+        </div>
+
+        <!-- Multiplayer Menu (hidden by default) -->
+        <div id="multiplayer-menu" class="submenu" style="display: none;">
+          <div class="mp-name-section">
+            <label for="player-name">Your Name:</label>
+            <input type="text" id="player-name" maxlength="12" placeholder="Enter name..." value="Player">
+          </div>
+          <div class="mp-buttons">
+            <button id="create-room-btn" class="btn-primary">CREATE ROOM</button>
+            <div class="join-section">
+              <input type="text" id="room-code-input" maxlength="4" placeholder="CODE" class="room-code-input">
+              <button id="join-room-btn" class="btn-primary">JOIN</button>
+            </div>
+          </div>
+          <p id="mp-status" class="mp-status"></p>
+          <button id="mp-back-to-main" class="btn-secondary">BACK</button>
+        </div>
+
+        <!-- Lobby Screen (hidden by default) -->
+        <div id="lobby-screen" class="submenu" style="display: none;">
+          <h3>LOBBY</h3>
+          <div class="room-info">
+            <span>Room Code: </span>
+            <span id="lobby-room-code" class="room-code-display">----</span>
+          </div>
+          <div class="player-list">
+            <h4>Players (<span id="player-count">1</span>/4)</h4>
+            <ul id="lobby-players"></ul>
+          </div>
+          <div class="map-selection">
+            <h3>SELECT MAP</h3>
+            <div class="map-buttons">
+              <button class="map-btn-mp selected" data-map="compound">Military Compound</button>
+              <button class="map-btn-mp" data-map="warehouse">Warehouse</button>
+              <button class="map-btn-mp" data-map="office">Office Complex</button>
+              <button class="map-btn-mp" data-map="embassy">Embassy</button>
+              <button class="map-btn-mp" data-map="random">Random Generated</button>
+            </div>
+          </div>
+          <div class="lobby-actions">
+            <button id="start-mp-game-btn" class="btn-primary" style="display: none;">START GAME</button>
+            <p id="waiting-text" class="waiting-text">Waiting for host to start...</p>
+            <button id="leave-room-btn" class="btn-secondary">LEAVE ROOM</button>
+          </div>
         </div>
 
         <div class="controls-info">
@@ -39,10 +93,10 @@
             <div class="control-item"><span class="key">SHIFT</span> Sprint</div>
             <div class="control-item"><span class="key">C</span> Change Stance</div>
             <div class="control-item"><span class="key">Q/E</span> Lean Left/Right</div>
-            <div class="control-item"><span class="key">LMB</span> Fire</div>
-            <div class="control-item"><span class="key">RMB</span> Aim Down Sights</div>
+            <div class="control-item"><span class="key">LMB</span> Move to</div>
+            <div class="control-item"><span class="key">RMB</span> Fire</div>
             <div class="control-item"><span class="key">R</span> Reload</div>
-            <div class="control-item"><span class="key">1-2</span> Switch Weapon</div>
+            <div class="control-item"><span class="key">SCROLL</span> Switch Weapon</div>
             <div class="control-item"><span class="key">G</span> Throw Grenade</div>
             <div class="control-item"><span class="key">H</span> Cycle Grenade Type</div>
             <div class="control-item"><span class="key">F</span> Open Door</div>
