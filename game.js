@@ -1580,6 +1580,7 @@ const MAP_TYPES = {
   warehouse: { name: 'Abandoned Warehouse', description: 'Industrial complex with open spaces' },
   office: { name: 'Office Complex', description: 'Multi-floor office building layout' },
   embassy: { name: 'Embassy', description: 'High-security diplomatic building' },
+  jungle: { name: 'Jungle Outpost', description: 'Dense jungle with supply crates and barriers' },
   random: { name: 'Random Generated', description: 'Procedurally generated layout' }
 };
 
@@ -1591,6 +1592,7 @@ class Level {
   constructor(mapType = 'compound') {
     this.walls = [];
     this.doors = [];
+    this.decorations = []; // Trees, bushes, crates, barriers, etc.
     this.spawnPoints = { team: [], enemy: [] };
     this.objectives = [];
     this.mapType = mapType;
@@ -1602,6 +1604,7 @@ class Level {
     // Clear existing
     this.walls = [];
     this.doors = [];
+    this.decorations = [];
     this.spawnPoints = { team: [], enemy: [] };
     this.objectives = [];
 
@@ -1614,6 +1617,9 @@ class Level {
         break;
       case 'embassy':
         this.generateEmbassy();
+        break;
+      case 'jungle':
+        this.generateJungle();
         break;
       case 'random':
         this.generateRandom();
@@ -2200,6 +2206,206 @@ class Level {
     this.objectives.push({x: 650, y: 500, type: 'bomb', secured: false});
   }
 
+  generateJungle() {
+    const W = CONFIG.MAP_WIDTH;
+    const H = CONFIG.MAP_HEIGHT;
+
+    // Outer boundary walls (thick jungle perimeter)
+    this.addWall(0, 0, W, 30, 'concrete');
+    this.addWall(0, H-30, W, 30, 'concrete');
+    this.addWall(0, 0, 30, H, 'concrete');
+    this.addWall(W-30, 0, 30, H, 'concrete');
+
+    // === CENTRAL OUTPOST BUILDING ===
+    // Main building structure
+    this.addWall(1200, 800, 400, 15, 'concrete');
+    this.addWall(1200, 1100, 400, 15, 'concrete');
+    this.addWall(1200, 800, 15, 315, 'concrete');
+    this.addWall(1600, 800, 15, 315, 'concrete');
+    this.addDoor(1350, 800, 80, 15, 'horizontal');
+    this.addDoor(1200, 920, 15, 60, 'vertical');
+    this.addDoor(1600, 920, 15, 60, 'vertical');
+
+    // Interior walls
+    this.addWall(1350, 815, 12, 140, 'drywall');
+    this.addDoor(1350, 870, 12, 50, 'vertical');
+    this.addWall(1450, 815, 12, 140, 'drywall');
+    this.addDoor(1450, 870, 12, 50, 'vertical');
+
+    // === SUPPLY DEPOT (Left side) ===
+    this.addWall(300, 500, 250, 12, 'metal');
+    this.addWall(300, 700, 250, 12, 'metal');
+    this.addWall(300, 500, 12, 212, 'metal');
+    this.addWall(550, 500, 12, 212, 'metal');
+    this.addDoor(400, 500, 60, 12, 'horizontal');
+    this.addDoor(400, 700, 60, 12, 'horizontal');
+
+    // === WATCH TOWER (Top right) ===
+    this.addWall(2400, 200, 200, 12, 'wood');
+    this.addWall(2400, 400, 200, 12, 'wood');
+    this.addWall(2400, 200, 12, 212, 'wood');
+    this.addWall(2600, 200, 12, 212, 'wood');
+    this.addDoor(2400, 280, 12, 60, 'vertical');
+
+    // === AMMO BUNKER (Bottom) ===
+    this.addWall(800, 1500, 300, 15, 'concrete');
+    this.addWall(800, 1700, 300, 15, 'concrete');
+    this.addWall(800, 1500, 15, 215, 'concrete');
+    this.addWall(1100, 1500, 15, 215, 'concrete');
+    this.addDoor(900, 1500, 80, 15, 'horizontal');
+
+    // === SCATTERED BARRIERS (Yellow construction barriers) ===
+    // These provide cover throughout the jungle paths
+    this.addWall(600, 300, 80, 15, 'wood');
+    this.addWall(900, 450, 15, 80, 'wood');
+    this.addWall(1800, 600, 100, 15, 'wood');
+    this.addWall(2100, 800, 15, 100, 'wood');
+    this.addWall(500, 1000, 80, 15, 'wood');
+    this.addWall(1600, 1400, 100, 15, 'wood');
+    this.addWall(2300, 1200, 15, 80, 'wood');
+    this.addWall(400, 1300, 15, 100, 'wood');
+    this.addWall(2500, 600, 80, 15, 'wood');
+    this.addWall(1100, 350, 15, 80, 'wood');
+
+    // === SUPPLY CRATES (Various sizes) ===
+    // Small crates throughout
+    this.addWall(350, 550, 40, 40, 'wood');
+    this.addWall(450, 620, 50, 35, 'wood');
+    this.addWall(500, 550, 35, 45, 'wood');
+
+    // Ammo crates near bunker
+    this.addWall(850, 1550, 45, 40, 'metal');
+    this.addWall(920, 1560, 50, 35, 'metal');
+    this.addWall(1000, 1550, 40, 45, 'metal');
+    this.addWall(850, 1620, 40, 40, 'metal');
+    this.addWall(920, 1630, 45, 35, 'metal');
+
+    // Health/supply crates
+    this.addWall(1250, 850, 50, 40, 'wood');
+    this.addWall(1320, 860, 45, 35, 'wood');
+    this.addWall(1500, 850, 40, 45, 'wood');
+    this.addWall(1520, 1020, 55, 40, 'wood');
+
+    // Random scattered crates
+    this.addWall(2450, 280, 50, 40, 'wood');
+    this.addWall(2520, 300, 40, 50, 'wood');
+    this.addWall(700, 800, 45, 40, 'wood');
+    this.addWall(2000, 1000, 50, 45, 'wood');
+    this.addWall(1800, 1600, 40, 40, 'wood');
+    this.addWall(2600, 1400, 55, 40, 'wood');
+
+    // === BODY ARMOR AND VESTS (small metal boxes) ===
+    this.addWall(2200, 500, 60, 45, 'metal');
+    this.addWall(2280, 550, 55, 40, 'metal');
+    this.addWall(1700, 900, 50, 50, 'metal');
+
+    // === DENSE VEGETATION AREAS ===
+    // These create visual density but are passable (decorations)
+
+    // Top left jungle cluster
+    for (let i = 0; i < 12; i++) {
+      const x = 80 + Math.random() * 400;
+      const y = 80 + Math.random() * 350;
+      this.addDecoration(x, y, 'bush', { scale: 0.8 + Math.random() * 0.6, variant: Math.floor(Math.random() * 3) });
+    }
+    for (let i = 0; i < 6; i++) {
+      const x = 100 + Math.random() * 350;
+      const y = 100 + Math.random() * 300;
+      this.addDecoration(x, y, 'tree', { scale: 0.9 + Math.random() * 0.4 });
+    }
+
+    // Right side jungle
+    for (let i = 0; i < 15; i++) {
+      const x = 2650 + Math.random() * 300;
+      const y = 500 + Math.random() * 1200;
+      this.addDecoration(x, y, 'bush', { scale: 0.7 + Math.random() * 0.6, variant: Math.floor(Math.random() * 3) });
+    }
+    for (let i = 0; i < 8; i++) {
+      const x = 2700 + Math.random() * 250;
+      const y = 600 + Math.random() * 1000;
+      this.addDecoration(x, y, 'tree', { scale: 0.8 + Math.random() * 0.5 });
+    }
+
+    // Bottom jungle
+    for (let i = 0; i < 18; i++) {
+      const x = 100 + Math.random() * 2600;
+      const y = 1800 + Math.random() * 250;
+      this.addDecoration(x, y, 'bush', { scale: 0.6 + Math.random() * 0.7, variant: Math.floor(Math.random() * 3) });
+    }
+    for (let i = 0; i < 10; i++) {
+      const x = 200 + Math.random() * 2400;
+      const y = 1850 + Math.random() * 200;
+      this.addDecoration(x, y, 'tree', { scale: 0.7 + Math.random() * 0.6 });
+    }
+
+    // Central scattered vegetation
+    for (let i = 0; i < 25; i++) {
+      const x = 600 + Math.random() * 1800;
+      const y = 400 + Math.random() * 1200;
+      // Avoid spawning in buildings
+      if ((x > 1180 && x < 1630 && y > 780 && y < 1120) ||
+          (x > 280 && x < 580 && y > 480 && y < 720) ||
+          (x > 780 && x < 1120 && y > 1480 && y < 1720)) continue;
+      this.addDecoration(x, y, 'fern', { scale: 0.5 + Math.random() * 0.5, variant: Math.floor(Math.random() * 2) });
+    }
+
+    // Add palm trees
+    for (let i = 0; i < 8; i++) {
+      const x = 100 + Math.random() * 2700;
+      const y = 100 + Math.random() * 1900;
+      if ((x > 1180 && x < 1630 && y > 780 && y < 1120) ||
+          (x > 280 && x < 580 && y > 480 && y < 720)) continue;
+      this.addDecoration(x, y, 'palm', { scale: 0.8 + Math.random() * 0.4 });
+    }
+
+    // Add logs (fallen trees)
+    this.addDecoration(700, 350, 'log', { rotation: 0.3, scale: 1.2 });
+    this.addDecoration(1900, 500, 'log', { rotation: -0.2, scale: 1.0 });
+    this.addDecoration(500, 1200, 'log', { rotation: 0.8, scale: 1.1 });
+    this.addDecoration(2300, 1500, 'log', { rotation: -0.5, scale: 0.9 });
+    this.addDecoration(1100, 650, 'log', { rotation: 0.1, scale: 1.3 });
+
+    // Add barrels
+    this.addDecoration(380, 580, 'barrel', { variant: 0 });
+    this.addDecoration(520, 640, 'barrel', { variant: 1 });
+    this.addDecoration(880, 1590, 'barrel', { variant: 0 });
+    this.addDecoration(1050, 1600, 'barrel', { variant: 1 });
+    this.addDecoration(2480, 350, 'barrel', { variant: 0 });
+    this.addDecoration(1750, 950, 'barrel', { variant: 1 });
+
+    // Add sandbag positions
+    this.addDecoration(950, 750, 'sandbag', { rotation: 0 });
+    this.addDecoration(1150, 1200, 'sandbag', { rotation: Math.PI / 4 });
+    this.addDecoration(2000, 700, 'sandbag', { rotation: -Math.PI / 6 });
+    this.addDecoration(600, 1100, 'sandbag', { rotation: Math.PI / 3 });
+
+    // === SPAWN POINTS ===
+    this.spawnPoints.team = [
+      {x: 150, y: 1950}, {x: 200, y: 1950}, {x: 150, y: 2000}, {x: 200, y: 2000}
+    ];
+
+    this.spawnPoints.enemy = [
+      // Main building
+      {x: 1300, y: 950}, {x: 1500, y: 950},
+      // Supply depot
+      {x: 420, y: 600},
+      // Watch tower
+      {x: 2500, y: 300},
+      // Bunker
+      {x: 950, y: 1600},
+      // Scattered patrol
+      {x: 1800, y: 500}, {x: 2200, y: 900},
+      {x: 800, y: 1200}, {x: 2400, y: 1300},
+      {x: 1500, y: 1500}, {x: 2700, y: 800},
+      {x: 600, y: 400}
+    ];
+
+    // === OBJECTIVES ===
+    this.objectives.push({x: 1400, y: 950, type: 'hostage', secured: false});
+    this.objectives.push({x: 950, y: 1600, type: 'intel', secured: false});
+    this.objectives.push({x: 2500, y: 300, type: 'bomb', secured: false});
+  }
+
   generateRandom() {
     const W = CONFIG.MAP_WIDTH;
     const H = CONFIG.MAP_HEIGHT;
@@ -2404,6 +2610,17 @@ class Level {
       destroyed: false,
       hp: 100,
       material: CONFIG.MATERIALS.door
+    });
+  }
+
+  // Decoration types: tree, bush, fern, crate, crate_ammo, crate_health, barrier, barrel, sandbag, log
+  addDecoration(x, y, type, options = {}) {
+    this.decorations.push({
+      x, y,
+      type,
+      rotation: options.rotation || 0,
+      scale: options.scale || 1,
+      variant: options.variant || 0
     });
   }
 
@@ -2614,6 +2831,246 @@ class Level {
         ctx.fillStyle = door.material.color;
       }
       ctx.fillRect(door.x, door.y, door.w, door.h);
+    }
+
+    // Decorations (vegetation, crates, barrels, etc.)
+    for (const dec of this.decorations) {
+      ctx.save();
+      ctx.translate(dec.x, dec.y);
+      ctx.rotate(dec.rotation);
+      ctx.scale(dec.scale, dec.scale);
+
+      switch(dec.type) {
+        case 'tree':
+          // Tree trunk
+          ctx.fillStyle = '#4a3520';
+          ctx.fillRect(-8, -8, 16, 16);
+          // Foliage (layered circles for depth)
+          ctx.fillStyle = '#1a5c1a';
+          ctx.beginPath();
+          ctx.arc(0, -15, 35, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#228b22';
+          ctx.beginPath();
+          ctx.arc(-10, -20, 25, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(12, -18, 22, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#2d8b2d';
+          ctx.beginPath();
+          ctx.arc(0, -25, 20, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+
+        case 'palm':
+          // Palm trunk
+          ctx.fillStyle = '#5c4033';
+          ctx.fillRect(-6, -10, 12, 30);
+          // Palm fronds
+          ctx.fillStyle = '#228b22';
+          for (let i = 0; i < 6; i++) {
+            ctx.save();
+            ctx.rotate(i * Math.PI / 3);
+            ctx.beginPath();
+            ctx.ellipse(0, -40, 8, 35, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+          ctx.fillStyle = '#2d9b2d';
+          for (let i = 0; i < 6; i++) {
+            ctx.save();
+            ctx.rotate(i * Math.PI / 3 + 0.3);
+            ctx.beginPath();
+            ctx.ellipse(0, -35, 6, 28, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+          break;
+
+        case 'bush':
+          // Bush variants with different shapes
+          const bushColors = ['#228b22', '#2d8b2d', '#1a6b1a'];
+          ctx.fillStyle = bushColors[dec.variant % 3];
+          if (dec.variant === 0) {
+            // Round bush
+            ctx.beginPath();
+            ctx.arc(0, 0, 25, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#32ab32';
+            ctx.beginPath();
+            ctx.arc(-5, -5, 15, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (dec.variant === 1) {
+            // Cluster bush
+            ctx.beginPath();
+            ctx.arc(-10, 0, 18, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(10, 5, 16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#32ab32';
+            ctx.beginPath();
+            ctx.arc(0, -5, 14, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            // Spiky bush
+            ctx.beginPath();
+            ctx.moveTo(0, -25);
+            for (let i = 0; i < 8; i++) {
+              const angle = (i / 8) * Math.PI * 2 - Math.PI / 2;
+              const r = i % 2 === 0 ? 25 : 15;
+              ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+            }
+            ctx.closePath();
+            ctx.fill();
+          }
+          break;
+
+        case 'fern':
+          // Small fern plants
+          ctx.fillStyle = dec.variant === 0 ? '#3a7a3a' : '#2a6a2a';
+          for (let i = 0; i < 5; i++) {
+            ctx.save();
+            ctx.rotate(i * Math.PI / 2.5 - Math.PI / 2);
+            ctx.beginPath();
+            ctx.ellipse(0, -12, 3, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+          break;
+
+        case 'log':
+          // Fallen tree log
+          ctx.fillStyle = '#5c4033';
+          ctx.fillRect(-50, -10, 100, 20);
+          ctx.fillStyle = '#4a3520';
+          ctx.beginPath();
+          ctx.arc(-50, 0, 10, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#6b5040';
+          ctx.beginPath();
+          ctx.arc(50, 0, 10, 0, Math.PI * 2);
+          ctx.fill();
+          // Wood rings
+          ctx.strokeStyle = '#3a2510';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(-50, 0, 4, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(-50, 0, 7, 0, Math.PI * 2);
+          ctx.stroke();
+          break;
+
+        case 'barrel':
+          // Metal/oil barrel
+          ctx.fillStyle = dec.variant === 0 ? '#4a4a5a' : '#5a4a3a';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 15, 12, 0, 0, Math.PI * 2);
+          ctx.fill();
+          // Barrel bands
+          ctx.strokeStyle = '#2a2a2a';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(0, -6, 14, 4, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.ellipse(0, 6, 14, 4, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          // Top highlight
+          ctx.fillStyle = dec.variant === 0 ? '#5a5a6a' : '#6a5a4a';
+          ctx.beginPath();
+          ctx.ellipse(0, -2, 10, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+
+        case 'sandbag':
+          // Sandbag barrier
+          ctx.fillStyle = '#8b7355';
+          // Bottom row
+          ctx.beginPath();
+          ctx.ellipse(-18, 5, 16, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(0, 5, 16, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(18, 5, 16, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+          // Top row
+          ctx.fillStyle = '#9b8365';
+          ctx.beginPath();
+          ctx.ellipse(-10, -5, 16, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(10, -5, 16, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+
+        case 'crate':
+          // Wooden crate
+          ctx.fillStyle = '#6b5030';
+          ctx.fillRect(-20, -20, 40, 40);
+          ctx.strokeStyle = '#4a3020';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-20, -20, 40, 40);
+          // Cross pattern
+          ctx.beginPath();
+          ctx.moveTo(-20, 0);
+          ctx.lineTo(20, 0);
+          ctx.moveTo(0, -20);
+          ctx.lineTo(0, 20);
+          ctx.stroke();
+          break;
+
+        case 'crate_ammo':
+          // Ammo crate (green markings)
+          ctx.fillStyle = '#5a5030';
+          ctx.fillRect(-22, -18, 44, 36);
+          ctx.strokeStyle = '#3a3020';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-22, -18, 44, 36);
+          // Ammo markings
+          ctx.fillStyle = '#4a6a30';
+          ctx.fillRect(-18, -14, 36, 8);
+          ctx.fillRect(-18, 6, 36, 8);
+          ctx.strokeStyle = '#2a4a20';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(-18, -14, 36, 8);
+          ctx.strokeRect(-18, 6, 36, 8);
+          break;
+
+        case 'crate_health':
+          // Health/supply crate (red markings)
+          ctx.fillStyle = '#5a4040';
+          ctx.fillRect(-20, -20, 40, 40);
+          ctx.strokeStyle = '#3a2020';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-20, -20, 40, 40);
+          // Red cross
+          ctx.fillStyle = '#8a3030';
+          ctx.fillRect(-4, -14, 8, 28);
+          ctx.fillRect(-14, -4, 28, 8);
+          break;
+
+        case 'barrier':
+          // Construction barrier (yellow/black)
+          ctx.fillStyle = '#d4a520';
+          ctx.fillRect(-40, -8, 80, 16);
+          // Black stripes
+          ctx.fillStyle = '#1a1a1a';
+          for (let i = -35; i < 35; i += 20) {
+            ctx.save();
+            ctx.translate(i, 0);
+            ctx.rotate(Math.PI / 4);
+            ctx.fillRect(-4, -15, 8, 30);
+            ctx.restore();
+          }
+          break;
+      }
+
+      ctx.restore();
     }
 
     // Objectives
