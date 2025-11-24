@@ -18,6 +18,7 @@
         <!-- Main Menu Buttons -->
         <div id="main-menu-buttons" class="menu-section">
           <button id="singleplayer-btn" class="btn-primary">SINGLE PLAYER</button>
+          <button id="load-game-btn" class="btn-primary">LOAD GAME</button>
           <button id="multiplayer-btn" class="btn-primary">MULTIPLAYER</button>
           <button id="sound-toggle" class="btn-secondary">Sound: ON</button>
         </div>
@@ -31,6 +32,7 @@
               <button class="map-btn" data-map="warehouse">Warehouse</button>
               <button class="map-btn" data-map="office">Office Complex</button>
               <button class="map-btn" data-map="embassy">Embassy</button>
+              <button class="map-btn" data-map="jungle">Jungle Outpost</button>
               <button class="map-btn" data-map="random">Random Generated</button>
             </div>
             <p id="map-description" class="map-desc">Large outdoor facility with multiple buildings</p>
@@ -76,6 +78,7 @@
               <button class="map-btn-mp" data-map="warehouse">Warehouse</button>
               <button class="map-btn-mp" data-map="office">Office Complex</button>
               <button class="map-btn-mp" data-map="embassy">Embassy</button>
+              <button class="map-btn-mp" data-map="jungle">Jungle Outpost</button>
               <button class="map-btn-mp" data-map="random">Random Generated</button>
             </div>
           </div>
@@ -101,6 +104,9 @@
             <div class="control-item"><span class="key">H</span> Cycle Grenade Type</div>
             <div class="control-item"><span class="key">F</span> Open Door</div>
             <div class="control-item"><span class="key">T</span> Cycle Formation</div>
+            <div class="control-item"><span class="key">ESC</span> Pause Menu</div>
+            <div class="control-item"><span class="key">F5</span> Quick Save</div>
+            <div class="control-item"><span class="key">F9</span> Quick Load</div>
           </div>
         </div>
 
@@ -146,6 +152,41 @@
         </div>
         <div class="grenade-info">
           <div id="grenade-count">FRAG: 2</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pause Menu -->
+    <div id="pause-menu" style="display: none;">
+      <div class="pause-content">
+        <h2>PAUSED</h2>
+        <div class="pause-buttons">
+          <button id="resume-btn" class="btn-primary">RESUME</button>
+          <button id="save-game-btn" class="btn-primary">SAVE GAME</button>
+          <button id="load-game-pause-btn" class="btn-secondary">LOAD GAME</button>
+          <button id="quit-to-menu-btn" class="btn-secondary">QUIT TO MENU</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Save/Load Menu Overlay -->
+    <div id="save-load-menu" style="display: none;">
+      <div class="save-load-content">
+        <h2 id="save-load-title">SAVE GAME</h2>
+
+        <div id="save-name-section" class="save-name-section">
+          <label for="save-name-input">Save Name (optional):</label>
+          <input type="text" id="save-name-input" maxlength="50" placeholder="Enter save name...">
+        </div>
+
+        <div id="save-load-message" class="save-load-message" style="display: none;"></div>
+
+        <div id="save-slots-container" class="save-slots-container">
+          <!-- Save slots will be populated dynamically -->
+        </div>
+
+        <div class="save-load-actions">
+          <button id="save-load-close-btn" class="btn-secondary">CLOSE</button>
         </div>
       </div>
     </div>
