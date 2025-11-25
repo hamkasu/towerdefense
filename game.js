@@ -1313,6 +1313,94 @@ class ShellCasing {
 }
 
 // =============================================================================
+// ITEM DROP CLASS
+// =============================================================================
+
+class ItemDrop {
+  constructor(x, y, type, subtype = null, amount = 1) {
+    this.x = x;
+    this.y = y;
+    this.type = type; // 'weapon', 'ammo', 'grenade', 'health'
+    this.subtype = subtype; // weapon type, grenade type, etc.
+    this.amount = amount;
+    this.radius = 15;
+    this.bobOffset = Math.random() * Math.PI * 2;
+    this.lifetime = 0;
+    this.collected = false;
+  }
+
+  update() {
+    this.lifetime++;
+  }
+
+  draw(ctx) {
+    if (this.collected) return;
+
+    // Bob up and down
+    const bob = Math.sin(this.lifetime * 0.05 + this.bobOffset) * 3;
+    const y = this.y + bob;
+
+    // Background circle
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.beginPath();
+    ctx.arc(this.x, y + 2, this.radius + 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Main circle with type color
+    let color;
+    switch (this.type) {
+      case 'weapon': color = '#4a90e2'; break;
+      case 'ammo': color = '#f5a623'; break;
+      case 'grenade': color = '#d0021b'; break;
+      case 'health': color = '#7ed321'; break;
+      default: color = '#ffffff';
+    }
+
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(this.x, y, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Icon/text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    let text = '';
+    switch (this.type) {
+      case 'weapon':
+        text = this.subtype === 'rifle' ? 'M4' :
+               this.subtype === 'smg' ? 'MP5' :
+               this.subtype === 'shotgun' ? 'M870' :
+               this.subtype === 'pistol' ? 'M9' : 'W';
+        break;
+      case 'ammo': text = `${this.amount}`; break;
+      case 'grenade': text = this.subtype === 'frag' ? 'G' : 'S'; break;
+      case 'health': text = '+'; break;
+    }
+    ctx.fillText(text, this.x, y);
+
+    // Pulse effect
+    if (this.lifetime < 60) {
+      const alpha = (1 - this.lifetime / 60) * 0.3;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(this.x, y, this.radius + this.lifetime / 3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  isNear(x, y, distance = 30) {
+    return utils.distance(this.x, this.y, x, y) < distance;
+  }
+}
+
+// =============================================================================
 // BULLET CLASS
 // =============================================================================
 
@@ -3291,6 +3379,7 @@ class Game {
     this.smokeClouds = [];
     this.breachCharges = [];
     this.explosionEffects = [];
+    this.itemDrops = [];
 
     // Map selection
     this.selectedMap = 'compound';
@@ -3868,6 +3957,9 @@ class Game {
     // Update player
     this.player.update(this.mouseX, this.mouseY, this.level);
 
+    // Check for item pickups near player
+    this.checkItemPickups(this.player);
+
     // Auto-fire for held mouse
     if (this.player.isFiring && this.player.weapon.auto) {
       const result = this.player.fire();
@@ -3883,6 +3975,13 @@ class Game {
       const tm = this.teammates[i];
       if (tm.isAI && !tm.isDead) {
         this.updateAITeammate(tm, i);
+      }
+    }
+
+    // Check for item pickups near teammates
+    for (const tm of this.teammates) {
+      if (!tm.isDead) {
+        this.checkItemPickups(tm);
       }
     }
 
@@ -3907,8 +4006,14 @@ class Game {
       const hit = bullet.update(this.level, allEntities.filter(e => e !== bullet.shooter));
       if (hit?.type === 'entity') {
         const damage = bullet.damage;
+        const wasAlive = !hit.entity.isDead;
         hit.entity.takeDamage(damage, bullet.startX, bullet.startY);
         this.spawnBlood(hit.x, hit.y);
+
+        // Spawn drops if enemy just died
+        if (wasAlive && hit.entity.isDead && this.enemies.includes(hit.entity)) {
+          this.spawnEnemyDrops(hit.entity);
+        }
       } else if (hit?.type === 'wall') {
         this.spawnSparks(hit.x, hit.y);
       }
@@ -3943,6 +4048,9 @@ class Game {
     // Update shell casings
     for (const c of this.shellCasings) c.update();
     this.shellCasings = this.shellCasings.filter(c => c.life > 0);
+
+    // Update item drops
+    for (const drop of this.itemDrops) drop.update();
 
     // Update effects
     if (this.flashOverlay > 0) this.flashOverlay -= 3;
@@ -4120,7 +4228,13 @@ class Game {
           const dist = utils.distance(x, y, entity.x, entity.y);
           if (dist < CONFIG.FRAG_RADIUS) {
             const damage = CONFIG.FRAG_DAMAGE * (1 - dist / CONFIG.FRAG_RADIUS);
+            const wasAlive = !entity.isDead;
             entity.takeDamage(damage, x, y);
+
+            // Spawn drops if enemy just died
+            if (wasAlive && entity.isDead && this.enemies.includes(entity)) {
+              this.spawnEnemyDrops(entity);
+            }
           }
         }
 
@@ -4179,6 +4293,105 @@ class Game {
         1
       ));
     }
+  }
+
+  spawnEnemyDrops(enemy) {
+    // Enemies always drop their weapon
+    if (enemy.weapon && enemy.weapon.type) {
+      this.itemDrops.push(new ItemDrop(enemy.x, enemy.y, 'weapon', enemy.weapon.type));
+    }
+
+    // 70% chance to drop ammo for their weapon type
+    if (Math.random() < 0.7) {
+      const ammoAmount = Math.floor(20 + Math.random() * 30); // 20-50 rounds
+      this.itemDrops.push(new ItemDrop(
+        enemy.x + (Math.random() - 0.5) * 20,
+        enemy.y + (Math.random() - 0.5) * 20,
+        'ammo',
+        enemy.weapon.type,
+        ammoAmount
+      ));
+    }
+
+    // 30% chance to drop a grenade
+    if (Math.random() < 0.3) {
+      const grenadeType = Math.random() < 0.7 ? 'frag' : 'smoke';
+      this.itemDrops.push(new ItemDrop(
+        enemy.x + (Math.random() - 0.5) * 25,
+        enemy.y + (Math.random() - 0.5) * 25,
+        'grenade',
+        grenadeType,
+        1
+      ));
+    }
+
+    // 15% chance to drop health pack
+    if (Math.random() < 0.15) {
+      this.itemDrops.push(new ItemDrop(
+        enemy.x + (Math.random() - 0.5) * 30,
+        enemy.y + (Math.random() - 0.5) * 30,
+        'health',
+        null,
+        30 // HP restore amount
+      ));
+    }
+  }
+
+  checkItemPickups(entity) {
+    if (entity.isDead) return;
+
+    for (const drop of this.itemDrops) {
+      if (drop.collected) continue;
+      if (!drop.isNear(entity.x, entity.y, 40)) continue;
+
+      // Found a nearby item
+      switch (drop.type) {
+        case 'weapon':
+          // Check if player already has this weapon type
+          const hasWeapon = entity.weapons.some(w => w.type === drop.subtype);
+          if (!hasWeapon && entity.weapons.length < 2) {
+            // Add new weapon
+            entity.weapons.push(entity.createWeapon(drop.subtype));
+            drop.collected = true;
+          } else if (hasWeapon) {
+            // Already have this weapon, add ammo instead
+            const weapon = entity.weapons.find(w => w.type === drop.subtype);
+            if (weapon) {
+              const template = CONFIG.WEAPONS[drop.subtype];
+              weapon.reserveAmmo += template.magSize * 2;
+              drop.collected = true;
+            }
+          }
+          break;
+
+        case 'ammo':
+          // Add ammo to matching weapon type
+          const weapon = entity.weapons.find(w => w.type === drop.subtype);
+          if (weapon) {
+            weapon.reserveAmmo += drop.amount;
+            drop.collected = true;
+          }
+          break;
+
+        case 'grenade':
+          entity.grenades[drop.subtype] = Math.min(
+            (entity.grenades[drop.subtype] || 0) + drop.amount,
+            10 // Max 10 of each grenade type
+          );
+          drop.collected = true;
+          break;
+
+        case 'health':
+          if (entity.hp < 100) {
+            entity.hp = Math.min(entity.hp + drop.amount, 100);
+            drop.collected = true;
+          }
+          break;
+      }
+    }
+
+    // Remove collected items
+    this.itemDrops = this.itemDrops.filter(d => !d.collected);
   }
 
   checkMissionStatus() {
@@ -4292,6 +4505,9 @@ class Game {
 
     // Particles
     for (const p of this.particles) p.draw(ctx);
+
+    // Item drops
+    for (const drop of this.itemDrops) drop.draw(ctx);
 
     // Grenade aiming indicator
     this.drawGrenadeAimIndicator(ctx);
