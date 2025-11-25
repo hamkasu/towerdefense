@@ -2772,6 +2772,12 @@ class Player {
 
     // Audio
     this.footstepTimer = 0;
+
+    // AI Orders (for AI teammates)
+    this.currentOrder = 'follow'; // 'follow', 'stay', 'guard', 'cover'
+    this.orderPosition = null; // Position for stay/guard orders
+    this.guardRadius = 150; // Radius for guard order
+    this.coverTarget = null; // Target position for cover order
   }
 
   createWeapon(type) {
@@ -4318,20 +4324,6 @@ class Game {
   }
 
   updateAITeammate(tm, index) {
-    // Get formation position for this teammate
-    const formation = CONFIG.FORMATIONS[this.currentFormation];
-    const posIndex = index - 1; // index 0 is player, teammates start at 1
-    const formationPos = formation.positions[posIndex] || formation.positions[0];
-
-    // Calculate target position based on player's facing direction
-    const playerAngle = this.player.angle;
-    const targetAngle = playerAngle + formationPos.angleOffset;
-    const targetX = this.player.x + Math.cos(targetAngle) * formationPos.distance;
-    const targetY = this.player.y + Math.sin(targetAngle) * formationPos.distance;
-
-    const distToTarget = utils.distance(tm.x, tm.y, targetX, targetY);
-    const distToPlayer = utils.distance(tm.x, tm.y, this.player.x, this.player.y);
-
     // Find nearest visible enemy
     let nearestEnemy = null;
     let nearestDist = Infinity;
@@ -4344,8 +4336,8 @@ class Game {
       }
     }
 
+    // Handle combat first (always engage if enemy is near)
     if (nearestEnemy && nearestDist < 250) {
-      // Combat - engage enemy but try to maintain formation
       tm.angle = utils.angle(tm.x, tm.y, nearestEnemy.x, nearestEnemy.y);
       if (tm.fireTimer <= 0 && tm.weapon.ammo > 0) {
         tm.fireTimer = tm.weapon.fireRate + Math.random() * 5;
@@ -4358,34 +4350,140 @@ class Game {
         this.shellCasings.push(new ShellCasing(tm.x, tm.y, tm.angle));
         sound.play(tm.weapon.sound, tm.x, tm.y);
       }
-
-      // In close combat formation, stay tighter even during combat
-      if (this.currentFormation === 'closeCombat' && distToTarget > 20) {
-        const moveAngle = utils.angle(tm.x, tm.y, targetX, targetY);
-        const speed = tm.speed * 0.4;
-        const nextX = tm.x + Math.cos(moveAngle) * speed;
-        const nextY = tm.y + Math.sin(moveAngle) * speed;
-        if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
-        if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
-      }
-    } else if (distToTarget > 15) {
-      // Move to formation position
-      const moveAngle = utils.angle(tm.x, tm.y, targetX, targetY);
-      // Move faster if far from position, slower when close
-      const speedMult = distToTarget > 100 ? 1.0 : distToTarget > 50 ? 0.8 : 0.6;
-      const speed = tm.speed * speedMult;
-      const nextX = tm.x + Math.cos(moveAngle) * speed;
-      const nextY = tm.y + Math.sin(moveAngle) * speed;
-      if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
-      if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
-
-      // Face the direction player is facing when moving in formation
-      tm.angle = playerAngle;
-    } else {
-      // In position - face the same direction as player
-      tm.angle = playerAngle;
     }
 
+    // Handle movement based on current order
+    switch (tm.currentOrder) {
+      case 'stay':
+        // Stay at current position, don't move
+        if (tm.orderPosition) {
+          const distToOrder = utils.distance(tm.x, tm.y, tm.orderPosition.x, tm.orderPosition.y);
+          if (distToOrder > 10) {
+            // Move back to stay position if pushed away
+            const moveAngle = utils.angle(tm.x, tm.y, tm.orderPosition.x, tm.orderPosition.y);
+            const speed = tm.speed * 0.5;
+            const nextX = tm.x + Math.cos(moveAngle) * speed;
+            const nextY = tm.y + Math.sin(moveAngle) * speed;
+            if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
+            if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
+          }
+        }
+        // Face the nearest threat or player direction
+        if (!nearestEnemy) {
+          tm.angle = this.player.angle;
+        }
+        break;
+
+      case 'guard':
+        // Guard a position, move within radius
+        if (tm.orderPosition) {
+          const distToGuard = utils.distance(tm.x, tm.y, tm.orderPosition.x, tm.orderPosition.y);
+
+          if (nearestEnemy && nearestDist < tm.guardRadius) {
+            // Enemy in guard radius - engage but stay in area
+            if (distToGuard > tm.guardRadius * 0.7) {
+              // Move back toward guard position
+              const moveAngle = utils.angle(tm.x, tm.y, tm.orderPosition.x, tm.orderPosition.y);
+              const speed = tm.speed * 0.4;
+              const nextX = tm.x + Math.cos(moveAngle) * speed;
+              const nextY = tm.y + Math.sin(moveAngle) * speed;
+              if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
+              if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
+            }
+          } else if (distToGuard > 20) {
+            // Return to guard position
+            const moveAngle = utils.angle(tm.x, tm.y, tm.orderPosition.x, tm.orderPosition.y);
+            const speed = tm.speed * 0.6;
+            const nextX = tm.x + Math.cos(moveAngle) * speed;
+            const nextY = tm.y + Math.sin(moveAngle) * speed;
+            if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
+            if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
+          } else {
+            // In position - scan for threats
+            if (!nearestEnemy) {
+              tm.angle += 0.02; // Slowly rotate to scan
+            }
+          }
+        }
+        break;
+
+      case 'cover':
+        // Move to cover position and provide suppressing fire
+        if (tm.coverTarget) {
+          const distToCover = utils.distance(tm.x, tm.y, tm.coverTarget.x, tm.coverTarget.y);
+
+          if (distToCover > 20) {
+            // Move to cover position
+            const moveAngle = utils.angle(tm.x, tm.y, tm.coverTarget.x, tm.coverTarget.y);
+            const speed = tm.speed * 0.8;
+            const nextX = tm.x + Math.cos(moveAngle) * speed;
+            const nextY = tm.y + Math.sin(moveAngle) * speed;
+            if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
+            if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
+          } else {
+            // In cover position - provide covering fire
+            if (nearestEnemy) {
+              // More aggressive firing when in cover
+              if (tm.fireTimer <= 0 && tm.weapon.ammo > 0 && Math.random() < 0.3) {
+                tm.fireTimer = tm.weapon.fireRate;
+                const spread = tm.weapon.spread * 1.5;
+                const angleOffset = (Math.random() - 0.5) * spread;
+                const bulletAngle = tm.angle + angleOffset;
+                const spawnX = tm.x + Math.cos(tm.angle) * 15;
+                const spawnY = tm.y + Math.sin(tm.angle) * 15;
+                this.bullets.push(new Bullet(spawnX, spawnY, bulletAngle, tm.weapon, tm));
+                this.shellCasings.push(new ShellCasing(tm.x, tm.y, tm.angle));
+                sound.play(tm.weapon.sound, tm.x, tm.y);
+              }
+            }
+          }
+        } else if (!nearestEnemy) {
+          // No cover target set, face player direction
+          tm.angle = this.player.angle;
+        }
+        break;
+
+      case 'follow':
+      default:
+        // Follow player in formation (original behavior)
+        const formation = CONFIG.FORMATIONS[this.currentFormation];
+        const posIndex = index - 1;
+        const formationPos = formation.positions[posIndex] || formation.positions[0];
+
+        const playerAngle = this.player.angle;
+        const targetAngle = playerAngle + formationPos.angleOffset;
+        const targetX = this.player.x + Math.cos(targetAngle) * formationPos.distance;
+        const targetY = this.player.y + Math.sin(targetAngle) * formationPos.distance;
+        const distToTarget = utils.distance(tm.x, tm.y, targetX, targetY);
+
+        if (nearestEnemy && nearestDist < 250) {
+          // Combat - try to maintain formation
+          if (this.currentFormation === 'closeCombat' && distToTarget > 20) {
+            const moveAngle = utils.angle(tm.x, tm.y, targetX, targetY);
+            const speed = tm.speed * 0.4;
+            const nextX = tm.x + Math.cos(moveAngle) * speed;
+            const nextY = tm.y + Math.sin(moveAngle) * speed;
+            if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
+            if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
+          }
+        } else if (distToTarget > 15) {
+          // Move to formation position
+          const moveAngle = utils.angle(tm.x, tm.y, targetX, targetY);
+          const speedMult = distToTarget > 100 ? 1.0 : distToTarget > 50 ? 0.8 : 0.6;
+          const speed = tm.speed * speedMult;
+          const nextX = tm.x + Math.cos(moveAngle) * speed;
+          const nextY = tm.y + Math.sin(moveAngle) * speed;
+          if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
+          if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
+          tm.angle = playerAngle;
+        } else {
+          // In position
+          tm.angle = playerAngle;
+        }
+        break;
+    }
+
+    // Update timers and reload
     if (tm.fireTimer > 0) tm.fireTimer--;
     if (tm.weapon.ammo <= 0 && tm.weapon.reserveAmmo > 0) {
       tm.weapon.ammo = tm.weapon.magSize;
@@ -4398,6 +4496,36 @@ class Game {
     const nextIndex = (currentIndex + 1) % this.formationKeys.length;
     this.currentFormation = this.formationKeys[nextIndex];
     return CONFIG.FORMATIONS[this.currentFormation];
+  }
+
+  giveOrderToTeam(orderType) {
+    // Give order to all AI teammates
+    for (const tm of this.teammates) {
+      if (tm.isAI && !tm.isDead && tm !== this.player) {
+        switch (orderType) {
+          case 'stay':
+            tm.currentOrder = 'stay';
+            tm.orderPosition = { x: tm.x, y: tm.y };
+            break;
+          case 'guard':
+            tm.currentOrder = 'guard';
+            tm.orderPosition = { x: tm.x, y: tm.y };
+            tm.guardRadius = 150;
+            break;
+          case 'follow':
+            tm.currentOrder = 'follow';
+            tm.orderPosition = null;
+            tm.coverTarget = null;
+            break;
+          case 'cover':
+            tm.currentOrder = 'cover';
+            // Set cover target to mouse position or ahead of player
+            tm.coverTarget = { x: this.mouseX, y: this.mouseY };
+            break;
+        }
+      }
+    }
+    return orderType;
   }
 
   switchToSoldier(index) {
@@ -4810,6 +4938,9 @@ class Game {
     // Teammates
     for (const tm of this.teammates) tm.draw(ctx);
 
+    // Draw order indicators for AI teammates
+    this.drawOrderIndicators(ctx);
+
     // Bullets
     for (const bullet of this.bullets) bullet.draw(ctx);
 
@@ -5047,6 +5178,119 @@ class Game {
     ctx.stroke();
   }
 
+  drawOrderIndicators(ctx) {
+    for (const tm of this.teammates) {
+      if (tm.isAI && !tm.isDead) {
+        // Draw order icon above teammate's head
+        const iconY = tm.y - tm.radius - 35;
+        const iconSize = 8;
+
+        // Order-specific colors and shapes
+        switch (tm.currentOrder) {
+          case 'stay':
+            // Red square for stay
+            ctx.fillStyle = 'rgba(255, 100, 100, 0.8)';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.fillRect(tm.x - iconSize/2, iconY - iconSize/2, iconSize, iconSize);
+            ctx.strokeRect(tm.x - iconSize/2, iconY - iconSize/2, iconSize, iconSize);
+            break;
+
+          case 'guard':
+            // Orange shield for guard
+            ctx.fillStyle = 'rgba(255, 165, 0, 0.8)';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(tm.x, iconY - iconSize);
+            ctx.lineTo(tm.x + iconSize, iconY);
+            ctx.lineTo(tm.x + iconSize/2, iconY + iconSize/2);
+            ctx.lineTo(tm.x, iconY + iconSize);
+            ctx.lineTo(tm.x - iconSize/2, iconY + iconSize/2);
+            ctx.lineTo(tm.x - iconSize, iconY);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw guard radius indicator
+            if (tm.orderPosition) {
+              ctx.strokeStyle = 'rgba(255, 165, 0, 0.3)';
+              ctx.lineWidth = 2;
+              ctx.setLineDash([5, 5]);
+              ctx.beginPath();
+              ctx.arc(tm.orderPosition.x, tm.orderPosition.y, tm.guardRadius, 0, Math.PI * 2);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+            break;
+
+          case 'cover':
+            // Purple crosshairs for cover
+            ctx.strokeStyle = 'rgba(200, 100, 255, 0.9)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(tm.x - iconSize, iconY);
+            ctx.lineTo(tm.x + iconSize, iconY);
+            ctx.moveTo(tm.x, iconY - iconSize);
+            ctx.lineTo(tm.x, iconY + iconSize);
+            ctx.stroke();
+
+            // Draw line to cover target
+            if (tm.coverTarget) {
+              ctx.strokeStyle = 'rgba(200, 100, 255, 0.4)';
+              ctx.lineWidth = 2;
+              ctx.setLineDash([5, 5]);
+              ctx.beginPath();
+              ctx.moveTo(tm.x, tm.y);
+              ctx.lineTo(tm.coverTarget.x, tm.coverTarget.y);
+              ctx.stroke();
+              ctx.setLineDash([]);
+
+              // Draw target position marker
+              ctx.fillStyle = 'rgba(200, 100, 255, 0.3)';
+              ctx.strokeStyle = 'rgba(200, 100, 255, 0.7)';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(tm.coverTarget.x, tm.coverTarget.y, 15, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+            }
+            break;
+
+          case 'follow':
+          default:
+            // Green arrow for follow
+            ctx.fillStyle = 'rgba(100, 255, 100, 0.8)';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(tm.x, iconY - iconSize);
+            ctx.lineTo(tm.x - iconSize, iconY + iconSize/2);
+            ctx.lineTo(tm.x - iconSize/3, iconY + iconSize/2);
+            ctx.lineTo(tm.x - iconSize/3, iconY + iconSize);
+            ctx.lineTo(tm.x + iconSize/3, iconY + iconSize);
+            ctx.lineTo(tm.x + iconSize/3, iconY + iconSize/2);
+            ctx.lineTo(tm.x + iconSize, iconY + iconSize/2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            break;
+        }
+
+        // Draw order text label
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3;
+        ctx.font = 'bold 9px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const orderText = tm.currentOrder.toUpperCase();
+        ctx.strokeText(orderText, tm.x, iconY - 12);
+        ctx.fillText(orderText, tm.x, iconY - 12);
+      }
+    }
+  }
+
   handleKeyDown(e) {
     // Handle ESC for pause menu (even when paused)
     if (e.key === 'Escape') {
@@ -5136,6 +5380,22 @@ class Game {
       case 't':
         // Cycle team formation
         this.cycleFormation();
+        break;
+      case 'z':
+        // Order: Follow me
+        this.giveOrderToTeam('follow');
+        break;
+      case 'x':
+        // Order: Stay here
+        this.giveOrderToTeam('stay');
+        break;
+      case 'b':
+        // Order: Guard this area
+        this.giveOrderToTeam('guard');
+        break;
+      case 'v':
+        // Order: Cover me (move to mouse position)
+        this.giveOrderToTeam('cover');
         break;
       case 'tab':
         // Cycle through soldiers
