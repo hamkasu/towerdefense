@@ -1477,6 +1477,82 @@ class Grenade {
 }
 
 // =============================================================================
+// EXPLOSION EFFECT CLASS
+// =============================================================================
+
+class ExplosionEffect {
+  constructor(x, y, radius) {
+    this.x = x;
+    this.y = y;
+    this.maxRadius = radius;
+    this.currentRadius = 0;
+    this.life = 45; // Total frames for the effect
+    this.maxLife = 45;
+    this.dead = false;
+  }
+
+  update() {
+    this.life--;
+    if (this.life <= 0) {
+      this.dead = true;
+      return;
+    }
+
+    // Expand quickly then hold
+    const progress = 1 - this.life / this.maxLife;
+    if (progress < 0.3) {
+      // Quick expansion phase (first 30% of time)
+      this.currentRadius = this.maxRadius * (progress / 0.3);
+    } else {
+      // Hold at max radius and fade
+      this.currentRadius = this.maxRadius;
+    }
+  }
+
+  draw(ctx) {
+    if (this.dead) return;
+
+    const progress = 1 - this.life / this.maxLife;
+    const alpha = progress < 0.3 ? 0.6 : 0.6 * (1 - (progress - 0.3) / 0.7);
+
+    ctx.save();
+
+    // Outer blast ring
+    ctx.strokeStyle = `rgba(255, 100, 0, ${alpha})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.currentRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner damage zone fill
+    const gradient = ctx.createRadialGradient(
+      this.x, this.y, 0,
+      this.x, this.y, this.currentRadius
+    );
+    gradient.addColorStop(0, `rgba(255, 200, 50, ${alpha * 0.5})`);
+    gradient.addColorStop(0.5, `rgba(255, 100, 0, ${alpha * 0.3})`);
+    gradient.addColorStop(1, `rgba(255, 50, 0, 0)`);
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.currentRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Shockwave ring (expanding fast)
+    if (progress < 0.5) {
+      const shockwaveRadius = this.maxRadius * 1.3 * (progress / 0.5);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * (1 - progress / 0.5)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, shockwaveRadius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+}
+
+// =============================================================================
 // SMOKE CLOUD CLASS
 // =============================================================================
 
@@ -2579,8 +2655,8 @@ class Player {
     this.reloadTimer = 0;
     this.isFiring = false;
 
-    // Grenades
-    this.grenades = { frag: 2, flash: 2, smoke: 1 };
+    // Grenades (frag and smoke only - no flashbangs)
+    this.grenades = { frag: 3, smoke: 2 };
     this.selectedGrenade = 'frag';
 
     // Effects
@@ -2773,7 +2849,7 @@ class Player {
   }
 
   cycleGrenade() {
-    const types = ['frag', 'flash', 'smoke'];
+    const types = ['frag', 'smoke'];
     const idx = types.indexOf(this.selectedGrenade);
     this.selectedGrenade = types[(idx + 1) % types.length];
   }
@@ -3214,6 +3290,7 @@ class Game {
     this.shellCasings = [];
     this.smokeClouds = [];
     this.breachCharges = [];
+    this.explosionEffects = [];
 
     // Map selection
     this.selectedMap = 'compound';
@@ -3565,6 +3642,7 @@ class Game {
     this.shellCasings = [];
     this.smokeClouds = [];
     this.breachCharges = [];
+    this.explosionEffects = [];
 
     this.missionComplete = false;
     this.missionFailed = false;
@@ -3646,6 +3724,7 @@ class Game {
     this.shellCasings = [];
     this.smokeClouds = [];
     this.breachCharges = [];
+    this.explosionEffects = [];
 
     this.missionComplete = false;
     this.missionFailed = false;
@@ -3851,6 +3930,12 @@ class Game {
     }
     this.smokeClouds = this.smokeClouds.filter(s => s.life > 0);
 
+    // Update explosion effects
+    for (const effect of this.explosionEffects) {
+      effect.update();
+    }
+    this.explosionEffects = this.explosionEffects.filter(e => !e.dead);
+
     // Update particles
     for (const p of this.particles) p.update();
     this.particles = this.particles.filter(p => p.life > 0);
@@ -4027,6 +4112,9 @@ class Game {
         this.screenShake = 15;
         this.level.breachWall(x, y, CONFIG.FRAG_RADIUS * 0.3);
 
+        // Spawn explosion area effect visualization
+        this.explosionEffects.push(new ExplosionEffect(x, y, CONFIG.FRAG_RADIUS));
+
         // Damage entities
         for (const entity of [...this.teammates, ...this.enemies]) {
           const dist = utils.distance(x, y, entity.x, entity.y);
@@ -4048,29 +4136,6 @@ class Game {
             30 + Math.random() * 20,
             3
           ));
-        }
-        break;
-
-      case 'flash':
-        sound.play('flashbang');
-
-        for (const entity of [...this.teammates, ...this.enemies]) {
-          const dist = utils.distance(x, y, entity.x, entity.y);
-          if (dist < CONFIG.FLASH_RADIUS && this.level.checkLineOfSight(x, y, entity.x, entity.y, [])) {
-            // Check if facing the flash
-            const angleToFlash = utils.angle(entity.x, entity.y, x, y);
-            let angleDiff = angleToFlash - entity.angle;
-            while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-            while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-
-            const intensity = (1 - dist / CONFIG.FLASH_RADIUS) * (1 - Math.abs(angleDiff) / Math.PI);
-            if (entity.flash) {
-              entity.flash(CONFIG.FLASH_DURATION * intensity);
-            }
-            if (entity === this.player) {
-              this.flashOverlay = Math.min(255, this.flashOverlay + 255 * intensity);
-            }
-          }
         }
         break;
 
@@ -4194,6 +4259,9 @@ class Game {
     // Smoke clouds
     for (const smoke of this.smokeClouds) smoke.draw(ctx);
 
+    // Explosion effects (area visualization)
+    for (const effect of this.explosionEffects) effect.draw(ctx);
+
     // Grenades
     for (const g of this.grenades) g.draw(ctx);
 
@@ -4224,6 +4292,9 @@ class Game {
 
     // Particles
     for (const p of this.particles) p.draw(ctx);
+
+    // Grenade aiming indicator
+    this.drawGrenadeAimIndicator(ctx);
 
     // Draw fog of war overlay
     this.level.drawFogOfWar(ctx, this.player.x, this.player.y, this.teammates);
@@ -4385,6 +4456,69 @@ class Game {
     ctx.fillStyle = '#ffffff';
     const restartText = this.isMultiplayer ? 'Press R to return to menu' : 'Press R to restart';
     ctx.fillText(restartText, CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2 + 50);
+  }
+
+  drawGrenadeAimIndicator(ctx) {
+    // Only show if player has grenades of selected type
+    if (this.player.grenades[this.player.selectedGrenade] <= 0) return;
+
+    const playerX = this.player.x;
+    const playerY = this.player.y;
+    const targetX = this.mouseX;
+    const targetY = this.mouseY;
+
+    // Calculate landing point (same logic as Grenade constructor)
+    const angle = utils.angle(playerX, playerY, targetX, targetY);
+    const maxThrowDist = 300;
+    const actualDist = utils.distance(playerX, playerY, targetX, targetY);
+    const throwDist = Math.min(actualDist, maxThrowDist);
+
+    const landingX = playerX + Math.cos(angle) * throwDist;
+    const landingY = playerY + Math.sin(angle) * throwDist;
+
+    // Get blast radius based on grenade type
+    let blastRadius;
+    let color;
+    if (this.player.selectedGrenade === 'frag') {
+      blastRadius = CONFIG.FRAG_RADIUS;
+      color = 'rgba(255, 100, 50, 0.5)'; // Orange for frag
+    } else if (this.player.selectedGrenade === 'smoke') {
+      blastRadius = CONFIG.SMOKE_RADIUS;
+      color = 'rgba(150, 150, 150, 0.4)'; // Gray for smoke
+    }
+
+    // Draw trajectory arc (dashed line)
+    ctx.strokeStyle = color.replace('0.5', '0.7').replace('0.4', '0.6');
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(playerX, playerY);
+
+    // Draw a slight arc
+    const midX = (playerX + landingX) / 2;
+    const midY = (playerY + landingY) / 2 - throwDist * 0.1; // Arc upward
+    ctx.quadraticCurveTo(midX, midY, landingX, landingY);
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset dash
+
+    // Draw blast radius circle at landing point
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color.replace('0.5', '0.8').replace('0.4', '0.7');
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(landingX, landingY, blastRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Draw crosshair at landing point
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(landingX - 10, landingY);
+    ctx.lineTo(landingX + 10, landingY);
+    ctx.moveTo(landingX, landingY - 10);
+    ctx.lineTo(landingX, landingY + 10);
+    ctx.stroke();
   }
 
   handleKeyDown(e) {
@@ -4769,6 +4903,7 @@ class Game {
     this.shellCasings = [];
     this.smokeClouds = [];
     this.breachCharges = [];
+    this.explosionEffects = [];
 
     // Restore mission state
     this.missionComplete = data.missionComplete || false;
