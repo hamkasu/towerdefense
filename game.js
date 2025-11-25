@@ -1757,7 +1757,7 @@ class Level {
     this.walls = [];
     this.doors = [];
     this.decorations = []; // Trees, bushes, crates, barriers, etc.
-    this.spawnPoints = { team: [], enemy: [] };
+    this.spawnPoints = { team: [], enemy: [], boss: null };
     this.objectives = [];
     this.mapType = mapType;
     this.mapName = MAP_TYPES[mapType]?.name || 'Unknown';
@@ -1974,7 +1974,7 @@ class Level {
     this.walls = [];
     this.doors = [];
     this.decorations = [];
-    this.spawnPoints = { team: [], enemy: [] };
+    this.spawnPoints = { team: [], enemy: [], boss: null };
     this.objectives = [];
 
     switch(mapType) {
@@ -2018,6 +2018,9 @@ class Level {
       {x: 1000, y: 600}, {x: 600, y: 1300}
     ];
 
+    // Boss spawn point - far corner of the map
+    this.spawnPoints.boss = {x: 2700, y: 1600};
+
     // Override objectives for compound theme
     this.objectives = [];
     this.objectives.push({x: 2600, y: 300, type: 'hostage', secured: false});
@@ -2042,6 +2045,9 @@ class Level {
       {x: 1400, y: 100}, {x: 900, y: 700}
     ];
 
+    // Boss spawn point
+    this.spawnPoints.boss = {x: 300, y: 1600};
+
     // Override objectives for warehouse theme
     this.objectives = [];
     this.objectives.push({x: 2700, y: 800, type: 'hostage', secured: false});
@@ -2053,6 +2059,9 @@ class Level {
     // Use standardized office layout (this is the base design)
     this.generateStandardOfficeLayout('Office Complex');
     // Default spawn points and objectives are already set by the helper
+
+    // Boss spawn point
+    this.spawnPoints.boss = {x: 2600, y: 1500};
   }
 
   generateEmbassy() {
@@ -2070,6 +2079,9 @@ class Level {
       {x: 1500, y: 1400}, {x: 1200, y: 1000},
       {x: 350, y: 350}, {x: 2650, y: 350}, {x: 2700, y: 1800}
     ];
+
+    // Boss spawn point
+    this.spawnPoints.boss = {x: 2650, y: 1800};
 
     // Override objectives for embassy theme
     this.objectives = [];
@@ -2096,6 +2108,9 @@ class Level {
       {x: 2700, y: 800}, {x: 600, y: 400}
     ];
 
+    // Boss spawn point
+    this.spawnPoints.boss = {x: 2700, y: 300};
+
     // Override objectives for jungle theme
     this.objectives = [];
     this.objectives.push({x: 2600, y: 300, type: 'hostage', secured: false});
@@ -2119,6 +2134,9 @@ class Level {
       {x: 2600, y: 900}, {x: 500, y: 800},
       {x: 1900, y: 1600}, {x: 2700, y: 1600}
     ];
+
+    // Boss spawn point
+    this.spawnPoints.boss = {x: 2700, y: 1600};
 
     // Override objectives for random theme
     this.objectives = [];
@@ -3358,6 +3376,223 @@ class Enemy {
 }
 
 // =============================================================================
+// BOSS CLASS
+// =============================================================================
+
+class Boss extends Enemy {
+  constructor(x, y) {
+    super(x, y);
+
+    // Enhanced stats
+    this.hp = 500;
+    this.maxHp = 500;
+    this.radius = CONFIG.ENEMY_RADIUS * 1.5; // 50% larger
+
+    // Better weapon - rifle instead of smg
+    this.weapon = { ...CONFIG.WEAPONS.rifle, ammo: 30, reserveAmmo: 120, type: 'rifle' };
+
+    // Boss-specific properties
+    this.isBoss = true;
+    this.armor = 0.5; // 50% damage reduction
+    this.moveSpeed = CONFIG.ENEMY_SPEED * 0.8; // Slightly slower
+    this.aggroRange = CONFIG.ENEMY_VIEW_RANGE * 1.5; // Larger aggro range
+
+    // Special abilities
+    this.grenadeCount = 3;
+    this.grenadeTimer = 0;
+    this.grenadeCooldown = 600; // 10 seconds at 60fps
+
+    this.healTimer = 0;
+    this.healCooldown = 900; // 15 seconds
+    this.canHeal = true;
+  }
+
+  takeDamage(amount, fromX, fromY) {
+    // Apply armor reduction
+    const reducedDamage = amount * this.armor;
+    this.hp -= reducedDamage;
+    sound.play('hit');
+
+    if (this.hp <= 0) {
+      this.hp = 0;
+      this.isDead = true;
+      return true;
+    }
+
+    // Self-heal ability when below 30% HP
+    if (this.hp < this.maxHp * 0.3 && this.canHeal && this.healTimer <= 0) {
+      this.hp = Math.min(this.hp + 150, this.maxHp);
+      this.healTimer = this.healCooldown;
+      this.canHeal = false; // Only heal once
+      sound.play('reload'); // Use reload sound as heal sound
+    }
+
+    // React to being shot
+    if (this.state === 'patrol') {
+      this.state = 'alert';
+      this.lastKnownTargetPos = { x: fromX, y: fromY };
+      this.alertTimer = 300;
+    }
+
+    return false;
+  }
+
+  update(players, level, smokeClouds) {
+    if (this.isDead) return null;
+
+    // Update timers
+    if (this.fireTimer > 0) this.fireTimer--;
+    if (this.grenadeTimer > 0) this.grenadeTimer--;
+    if (this.healTimer > 0) this.healTimer--;
+
+    // Try to throw grenade at players
+    const grenadeResult = this.tryThrowGrenade(players, level);
+    if (grenadeResult) {
+      return { ...super.update(players, level, smokeClouds), grenade: grenadeResult };
+    }
+
+    return super.update(players, level, smokeClouds);
+  }
+
+  tryThrowGrenade(players, level) {
+    if (this.grenadeCount <= 0 || this.grenadeTimer > 0) return null;
+
+    // Find nearest visible player
+    let nearestPlayer = null;
+    let nearestDist = Infinity;
+
+    for (const player of players) {
+      if (player.isDead) continue;
+      const dist = utils.distance(this.x, this.y, player.x, player.y);
+      if (dist < 400 && dist > 150) { // Throw range: 150-400 pixels
+        if (level.checkLineOfSight(this.x, this.y, player.x, player.y, [])) {
+          if (dist < nearestDist) {
+            nearestDist = dist;
+            nearestPlayer = player;
+          }
+        }
+      }
+    }
+
+    if (nearestPlayer) {
+      this.grenadeCount--;
+      this.grenadeTimer = this.grenadeCooldown;
+      return new Grenade(this.x, this.y, nearestPlayer.x, nearestPlayer.y, 'frag', this);
+    }
+
+    return null;
+  }
+
+  draw(ctx) {
+    if (this.isDead) {
+      this.drawDead(ctx);
+      return;
+    }
+
+    // Draw boss with special appearance
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+
+    // Draw glow effect for boss
+    const gradient = ctx.createRadialGradient(0, 0, this.radius * 0.5, 0, 0, this.radius * 2);
+    gradient.addColorStop(0, 'rgba(255, 50, 50, 0.3)');
+    gradient.addColorStop(1, 'rgba(255, 50, 50, 0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius * 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Boss body (larger, red tint)
+    ctx.fillStyle = '#8b0000'; // Dark red
+    ctx.strokeStyle = '#ff0000'; // Bright red outline
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Weapon
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, -3, this.radius + 8, 6);
+    ctx.fillStyle = '#444';
+    ctx.fillRect(this.radius, -5, 8, 10);
+
+    // Boss crown/marker
+    ctx.fillStyle = '#ffd700'; // Gold
+    ctx.strokeStyle = '#ff8c00'; // Orange outline
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      const x1 = Math.cos(angle) * this.radius * 0.7;
+      const y1 = Math.sin(angle) * this.radius * 0.7;
+      const x2 = Math.cos(angle) * this.radius * 1.1;
+      const y2 = Math.sin(angle) * this.radius * 1.1;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.lineTo(x2 + 2, y2);
+      ctx.lineTo(x1, y1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // Draw enhanced health bar
+    const barWidth = 60;
+    const barHeight = 6;
+    const x = this.x - barWidth/2;
+    const y = this.y - this.radius - 15;
+
+    // Background
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 2, y - 2, barWidth + 4, barHeight + 4);
+
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x, y, barWidth, barHeight);
+
+    // HP bar with color based on health
+    const hpPercent = this.hp / this.maxHp;
+    const barColor = hpPercent > 0.7 ? '#ff0000' :
+                     hpPercent > 0.3 ? '#ff6600' : '#ffaa00';
+    ctx.fillStyle = barColor;
+    ctx.fillRect(x, y, barWidth * hpPercent, barHeight);
+
+    // Boss label
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('BOSS', this.x, y - 5);
+  }
+
+  drawDead(ctx) {
+    // Draw dead boss similar to enemy but with red tint
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.fillStyle = '#4d0000'; // Dark red
+    ctx.strokeStyle = '#ff0000';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // X mark
+    ctx.strokeStyle = '#ff0000';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-this.radius * 0.5, -this.radius * 0.5);
+    ctx.lineTo(this.radius * 0.5, this.radius * 0.5);
+    ctx.moveTo(this.radius * 0.5, -this.radius * 0.5);
+    ctx.lineTo(-this.radius * 0.5, this.radius * 0.5);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// =============================================================================
 // GAME CLASS
 // =============================================================================
 
@@ -3725,6 +3960,12 @@ class Game {
       this.enemies.push(new Enemy(sp.x, sp.y));
     }
 
+    // Spawn boss if level has a boss spawn point
+    if (this.level.spawnPoints.boss) {
+      const bossSpawn = this.level.spawnPoints.boss;
+      this.enemies.push(new Boss(bossSpawn.x, bossSpawn.y));
+    }
+
     this.bullets = [];
     this.grenades = [];
     this.particles = [];
@@ -3805,6 +4046,12 @@ class Game {
     this.enemies = [];
     for (const sp of this.level.spawnPoints.enemy) {
       this.enemies.push(new Enemy(sp.x, sp.y));
+    }
+
+    // Spawn boss if level has a boss spawn point
+    if (this.level.spawnPoints.boss) {
+      const bossSpawn = this.level.spawnPoints.boss;
+      this.enemies.push(new Boss(bossSpawn.x, bossSpawn.y));
     }
 
     this.bullets = [];
@@ -3994,9 +4241,16 @@ class Game {
     for (const enemy of this.enemies) {
       const result = enemy.update(this.teammates.filter(t => !t.isDead), this.level, this.smokeClouds);
       if (result) {
-        this.bullets.push(result.bullet);
-        this.shellCasings.push(result.casing);
-        this.notifyEnemiesOfSound(enemy.x, enemy.y, 0.8);
+        if (result.bullet) {
+          this.bullets.push(result.bullet);
+          this.shellCasings.push(result.casing);
+          this.notifyEnemiesOfSound(enemy.x, enemy.y, 0.8);
+        }
+        // Handle boss grenades
+        if (result.grenade) {
+          this.grenades.push(result.grenade);
+          this.notifyEnemiesOfSound(enemy.x, enemy.y, 0.5);
+        }
       }
     }
 
@@ -4296,6 +4550,62 @@ class Game {
   }
 
   spawnEnemyDrops(enemy) {
+    const isBoss = enemy.isBoss === true;
+
+    // Boss drops - guaranteed and enhanced
+    if (isBoss) {
+      // Always drop weapon
+      if (enemy.weapon && enemy.weapon.type) {
+        this.itemDrops.push(new ItemDrop(enemy.x, enemy.y, 'weapon', enemy.weapon.type));
+      }
+
+      // Guaranteed ammo drops - lots of it
+      for (let i = 0; i < 3; i++) {
+        const ammoAmount = Math.floor(40 + Math.random() * 40); // 40-80 rounds
+        this.itemDrops.push(new ItemDrop(
+          enemy.x + (Math.random() - 0.5) * 40,
+          enemy.y + (Math.random() - 0.5) * 40,
+          'ammo',
+          enemy.weapon.type,
+          ammoAmount
+        ));
+      }
+
+      // Guaranteed grenades - multiple
+      for (let i = 0; i < 2; i++) {
+        this.itemDrops.push(new ItemDrop(
+          enemy.x + (Math.random() - 0.5) * 50,
+          enemy.y + (Math.random() - 0.5) * 50,
+          'grenade',
+          'frag',
+          2 // 2 grenades per drop
+        ));
+      }
+
+      // Guaranteed health pack - large
+      this.itemDrops.push(new ItemDrop(
+        enemy.x + (Math.random() - 0.5) * 45,
+        enemy.y + (Math.random() - 0.5) * 45,
+        'health',
+        null,
+        50 // 50 HP restore
+      ));
+
+      // Bonus weapon drops - random other weapons
+      const bonusWeapons = ['rifle', 'shotgun'];
+      for (const weaponType of bonusWeapons) {
+        this.itemDrops.push(new ItemDrop(
+          enemy.x + (Math.random() - 0.5) * 60,
+          enemy.y + (Math.random() - 0.5) * 60,
+          'weapon',
+          weaponType
+        ));
+      }
+
+      return; // Boss drops are complete
+    }
+
+    // Regular enemy drops
     // Enemies always drop their weapon
     if (enemy.weapon && enemy.weapon.type) {
       this.itemDrops.push(new ItemDrop(enemy.x, enemy.y, 'weapon', enemy.weapon.type));
