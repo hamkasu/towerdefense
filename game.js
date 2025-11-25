@@ -4293,6 +4293,9 @@ class Game {
     // Particles
     for (const p of this.particles) p.draw(ctx);
 
+    // Grenade aiming indicator
+    this.drawGrenadeAimIndicator(ctx);
+
     // Draw fog of war overlay
     this.level.drawFogOfWar(ctx, this.player.x, this.player.y, this.teammates);
 
@@ -4453,6 +4456,69 @@ class Game {
     ctx.fillStyle = '#ffffff';
     const restartText = this.isMultiplayer ? 'Press R to return to menu' : 'Press R to restart';
     ctx.fillText(restartText, CONFIG.CANVAS_WIDTH/2, CONFIG.CANVAS_HEIGHT/2 + 50);
+  }
+
+  drawGrenadeAimIndicator(ctx) {
+    // Only show if player has grenades of selected type
+    if (this.player.grenades[this.player.selectedGrenade] <= 0) return;
+
+    const playerX = this.player.x;
+    const playerY = this.player.y;
+    const targetX = this.mouseX;
+    const targetY = this.mouseY;
+
+    // Calculate landing point (same logic as Grenade constructor)
+    const angle = utils.angle(playerX, playerY, targetX, targetY);
+    const maxThrowDist = 300;
+    const actualDist = utils.distance(playerX, playerY, targetX, targetY);
+    const throwDist = Math.min(actualDist, maxThrowDist);
+
+    const landingX = playerX + Math.cos(angle) * throwDist;
+    const landingY = playerY + Math.sin(angle) * throwDist;
+
+    // Get blast radius based on grenade type
+    let blastRadius;
+    let color;
+    if (this.player.selectedGrenade === 'frag') {
+      blastRadius = CONFIG.FRAG_RADIUS;
+      color = 'rgba(255, 100, 50, 0.5)'; // Orange for frag
+    } else if (this.player.selectedGrenade === 'smoke') {
+      blastRadius = CONFIG.SMOKE_RADIUS;
+      color = 'rgba(150, 150, 150, 0.4)'; // Gray for smoke
+    }
+
+    // Draw trajectory arc (dashed line)
+    ctx.strokeStyle = color.replace('0.5', '0.7').replace('0.4', '0.6');
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(playerX, playerY);
+
+    // Draw a slight arc
+    const midX = (playerX + landingX) / 2;
+    const midY = (playerY + landingY) / 2 - throwDist * 0.1; // Arc upward
+    ctx.quadraticCurveTo(midX, midY, landingX, landingY);
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset dash
+
+    // Draw blast radius circle at landing point
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color.replace('0.5', '0.8').replace('0.4', '0.7');
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(landingX, landingY, blastRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Draw crosshair at landing point
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(landingX - 10, landingY);
+    ctx.lineTo(landingX + 10, landingY);
+    ctx.moveTo(landingX, landingY - 10);
+    ctx.lineTo(landingX, landingY + 10);
+    ctx.stroke();
   }
 
   handleKeyDown(e) {
