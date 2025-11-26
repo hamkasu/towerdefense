@@ -4561,6 +4561,10 @@ class Game {
     this.controlledSoldierIndex = index;
     this.player = targetSoldier;
 
+    // Show feedback message
+    const soldierName = targetSoldier.name || `Soldier ${index + 1}`;
+    this.showQuickMessage(`Now controlling: ${soldierName}`);
+
     return true;
   }
 
@@ -4938,6 +4942,9 @@ class Game {
     // Teammates
     for (const tm of this.teammates) tm.draw(ctx);
 
+    // Draw highlight for controlled soldier
+    this.drawControlledSoldierHighlight(ctx);
+
     // Draw order indicators for AI teammates
     this.drawOrderIndicators(ctx);
 
@@ -4973,6 +4980,9 @@ class Game {
 
     // Draw minimap (always on top, not affected by camera)
     this.drawMinimap(ctx);
+
+    // Draw controlled soldier HUD
+    this.drawControlledSoldierHUD(ctx);
 
     // Mission overlays
     if (this.missionComplete) {
@@ -5100,6 +5110,46 @@ class Game {
     );
   }
 
+  drawControlledSoldierHUD(ctx) {
+    if (!this.player) return;
+
+    // Draw soldier info in top-left corner
+    const padding = 10;
+    const boxX = padding;
+    const boxY = padding;
+    const boxWidth = 200;
+    const boxHeight = 80;
+
+    // Background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+
+    // Border
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+
+    // Soldier name
+    ctx.fillStyle = '#00ff00';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'left';
+    const name = this.player.name || 'Player';
+    ctx.fillText(`Controlling: ${name}`, boxX + 10, boxY + 25);
+
+    // Key hint
+    ctx.fillStyle = '#aaaaaa';
+    ctx.font = '12px monospace';
+    ctx.fillText('TAB: Cycle soldiers', boxX + 10, boxY + 45);
+    ctx.fillText('F1-F4: Direct select', boxX + 10, boxY + 62);
+
+    // Show count of alive teammates
+    const aliveCount = this.teammates.filter(tm => !tm.isDead).length;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${aliveCount}/${this.teammates.length}`, boxX + boxWidth - 10, boxY + 25);
+  }
+
   drawOverlay(ctx, text, color) {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
@@ -5176,6 +5226,42 @@ class Game {
     ctx.moveTo(landingX, landingY - 10);
     ctx.lineTo(landingX, landingY + 10);
     ctx.stroke();
+  }
+
+  drawControlledSoldierHighlight(ctx) {
+    if (!this.player || this.player.isDead) return;
+
+    // Draw pulsing circle around controlled soldier
+    const time = Date.now() / 1000;
+    const pulse = Math.sin(time * 3) * 0.3 + 0.7; // Pulsate between 0.4 and 1.0
+
+    ctx.save();
+    ctx.strokeStyle = `rgba(0, 255, 0, ${pulse})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(this.player.x, this.player.y, this.player.radius + 8, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Draw soldier name above head
+    ctx.fillStyle = 'rgba(0, 255, 0, 0.9)';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.lineWidth = 3;
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+
+    const name = this.player.name || 'Player';
+    const nameY = this.player.y - this.player.radius - 45;
+    ctx.strokeText(name, this.player.x, nameY);
+    ctx.fillText(name, this.player.x, nameY);
+
+    // Draw "[CONTROLLED]" tag
+    ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+    ctx.font = 'bold 10px monospace';
+    const tagY = this.player.y - this.player.radius - 32;
+    ctx.strokeText('[CONTROLLED]', this.player.x, tagY);
+    ctx.fillText('[CONTROLLED]', this.player.x, tagY);
+
+    ctx.restore();
   }
 
   drawOrderIndicators(ctx) {
