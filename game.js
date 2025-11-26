@@ -2973,6 +2973,13 @@ class Player {
     const reduction = this.stance === 'prone' ? 0.7 : 0.85;
     this.hp -= amount * reduction;
 
+    // Track damage time for AI suppression system
+    if (this.isAI && this.aiState) {
+      this.aiState.lastDamageTime = Date.now();
+      // Increase suppression based on damage amount
+      this.aiState.suppressionLevel = Math.min(100, this.aiState.suppressionLevel + amount * 2);
+    }
+
     // Start bleeding
     if (amount > 20) {
       this.bleeding = Math.min(this.bleeding + amount * 0.3, 10);
@@ -4324,31 +4331,170 @@ class Game {
   }
 
   updateAITeammate(tm, index) {
-    // Find nearest visible enemy
+    // Initialize AI state if not present
+    if (!tm.aiState) {
+      tm.aiState = {
+        lastReloadTime: 0,
+        lastGrenadeTime: 0,
+        suppressionLevel: 0, // How suppressed the AI is (0-100)
+        lastDamageTime: 0,
+        coverPosition: null,
+        preferredEngagementRange: 150,
+        burstCounter: 0,
+        targetEnemy: null
+      };
+    }
+
+    // Decay suppression over time
+    if (tm.aiState.suppressionLevel > 0) {
+      tm.aiState.suppressionLevel = Math.max(0, tm.aiState.suppressionLevel - 0.5);
+    }
+
+    // Check if taking damage recently (increases suppression)
+    const timeSinceLastDamage = Date.now() - tm.aiState.lastDamageTime;
+    if (timeSinceLastDamage < 2000) {
+      tm.aiState.suppressionLevel = Math.min(100, tm.aiState.suppressionLevel + 5);
+    }
+
+    // Find all visible enemies and select best target
     let nearestEnemy = null;
     let nearestDist = Infinity;
+    let threats = [];
+
     for (const enemy of this.enemies) {
       if (enemy.isDead) continue;
       const d = utils.distance(tm.x, tm.y, enemy.x, enemy.y);
-      if (d < nearestDist && this.level.checkLineOfSight(tm.x, tm.y, enemy.x, enemy.y, this.smokeClouds)) {
-        nearestDist = d;
-        nearestEnemy = enemy;
+      if (this.level.checkLineOfSight(tm.x, tm.y, enemy.x, enemy.y, this.smokeClouds)) {
+        threats.push({ enemy, distance: d });
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestEnemy = enemy;
+        }
       }
     }
 
-    // Handle combat first (always engage if enemy is near)
-    if (nearestEnemy && nearestDist < 250) {
-      tm.angle = utils.angle(tm.x, tm.y, nearestEnemy.x, nearestEnemy.y);
+    // Smart target selection: prioritize threats and distribute targets among team
+    let targetEnemy = nearestEnemy;
+    if (threats.length > 1) {
+      // Look for enemies that recently damaged us
+      const recentThreat = threats.find(t =>
+        t.enemy.lastTarget === tm && Date.now() - (t.enemy.lastAttackTime || 0) < 3000
+      );
+      if (recentThreat) {
+        targetEnemy = recentThreat.enemy;
+      } else {
+        // Target distribution: prefer enemies not already targeted by teammates
+        const teammateTargets = this.teammates
+          .filter(t => t !== tm && t.isAI && !t.isDead && t.aiState?.targetEnemy)
+          .map(t => t.aiState.targetEnemy);
+
+        // Find an enemy not being targeted by others
+        const untargetedThreat = threats.find(t => !teammateTargets.includes(t.enemy));
+        if (untargetedThreat && Math.random() < 0.7) {
+          targetEnemy = untargetedThreat.enemy;
+        }
+      }
+    }
+    tm.aiState.targetEnemy = targetEnemy;
+
+    // Check if low health (tactical retreat needed)
+    const healthPercent = tm.hp / 100;
+    const isLowHealth = healthPercent < 0.3;
+    const isCriticalHealth = healthPercent < 0.15;
+
+    // Proactive reloading (reload when safe and ammo is low)
+    const ammoPercent = tm.weapon.ammo / tm.weapon.magSize;
+    if (!targetEnemy && ammoPercent < 0.3 && tm.weapon.reserveAmmo > 0) {
+      const timeSinceReload = Date.now() - tm.aiState.lastReloadTime;
+      if (timeSinceReload > 5000) {
+        tm.reload();
+        tm.aiState.lastReloadTime = Date.now();
+      }
+    }
+
+    // Smart grenade usage (suppress groups or flush out cover)
+    if (targetEnemy && tm.grenades && tm.grenades.frag > 0) {
+      const timeSinceGrenade = Date.now() - tm.aiState.lastGrenadeTime;
+      const enemiesNearby = threats.filter(t => t.distance < 200).length;
+
+      // Throw grenade if: multiple enemies clustered OR enemy in cover at medium range
+      if (timeSinceGrenade > 15000 && (enemiesNearby >= 2 || (nearestDist > 80 && nearestDist < 200))) {
+        if (Math.random() < 0.15) { // 15% chance per update when conditions met
+          const grenade = tm.throwGrenade(targetEnemy.x, targetEnemy.y);
+          if (grenade) {
+            this.grenades.push(grenade);
+            tm.aiState.lastGrenadeTime = Date.now();
+            this.notifyEnemiesOfSound(tm.x, tm.y, 0.5);
+          }
+        }
+      }
+    }
+
+    // Combat behavior with suppression and tactics
+    const engagementRange = tm.aiState.preferredEngagementRange;
+    const shouldEngage = targetEnemy && nearestDist < 300;
+
+    if (shouldEngage) {
+      tm.angle = utils.angle(tm.x, tm.y, targetEnemy.x, targetEnemy.y);
+
+      // Decide whether to advance, hold, or retreat
+      let combatAction = 'hold'; // 'advance', 'hold', 'retreat'
+
+      if (isCriticalHealth) {
+        combatAction = 'retreat'; // Always retreat when critical
+      } else if (isLowHealth || tm.aiState.suppressionLevel > 60) {
+        combatAction = 'retreat'; // Retreat when low health or heavily suppressed
+      } else if (nearestDist > engagementRange * 1.5 && healthPercent > 0.6) {
+        combatAction = 'advance'; // Advance if healthy and enemy is far
+      } else if (nearestDist < engagementRange * 0.5) {
+        combatAction = 'retreat'; // Too close, back up
+      }
+
+      // Execute combat movement (unless in specific order mode)
+      if (tm.currentOrder === 'follow' || !tm.currentOrder) {
+        const moveSpeed = tm.speed * 0.3;
+        let moveAngle;
+
+        if (combatAction === 'advance') {
+          moveAngle = utils.angle(tm.x, tm.y, targetEnemy.x, targetEnemy.y);
+        } else if (combatAction === 'retreat') {
+          moveAngle = utils.angle(targetEnemy.x, targetEnemy.y, tm.x, tm.y); // Away from enemy
+        }
+
+        if (moveAngle !== undefined) {
+          const nextX = tm.x + Math.cos(moveAngle) * moveSpeed;
+          const nextY = tm.y + Math.sin(moveAngle) * moveSpeed;
+          if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
+          if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
+        }
+      }
+
+      // Smart firing with burst control and suppression awareness
       if (tm.fireTimer <= 0 && tm.weapon.ammo > 0) {
-        tm.fireTimer = tm.weapon.fireRate + Math.random() * 5;
-        const spread = tm.weapon.spread * 1.2;
-        const angleOffset = (Math.random() - 0.5) * spread;
-        const bulletAngle = tm.angle + angleOffset;
-        const spawnX = tm.x + Math.cos(tm.angle) * 15;
-        const spawnY = tm.y + Math.sin(tm.angle) * 15;
-        this.bullets.push(new Bullet(spawnX, spawnY, bulletAngle, tm.weapon, tm));
-        this.shellCasings.push(new ShellCasing(tm.x, tm.y, tm.angle));
-        sound.play(tm.weapon.sound, tm.x, tm.y);
+        const accuracyMod = tm.aiState.suppressionLevel / 200; // More suppression = less accurate
+        const shouldFire = tm.aiState.suppressionLevel < 80; // Don't fire when heavily suppressed
+
+        if (shouldFire) {
+          // Burst fire control (fire 3-5 rounds then pause)
+          tm.aiState.burstCounter++;
+          const burstSize = 3 + Math.floor(Math.random() * 3);
+
+          if (tm.aiState.burstCounter >= burstSize) {
+            tm.aiState.burstCounter = 0;
+            tm.fireTimer = tm.weapon.fireRate * (3 + Math.random() * 2); // Longer pause between bursts
+          } else {
+            tm.fireTimer = tm.weapon.fireRate + Math.random() * 3;
+          }
+
+          const spread = tm.weapon.spread * (1.2 + accuracyMod);
+          const angleOffset = (Math.random() - 0.5) * spread;
+          const bulletAngle = tm.angle + angleOffset;
+          const spawnX = tm.x + Math.cos(tm.angle) * 15;
+          const spawnY = tm.y + Math.sin(tm.angle) * 15;
+          this.bullets.push(new Bullet(spawnX, spawnY, bulletAngle, tm.weapon, tm));
+          this.shellCasings.push(new ShellCasing(tm.x, tm.y, tm.angle));
+          sound.play(tm.weapon.sound, tm.x, tm.y);
+        }
       }
     }
 
@@ -4481,6 +4627,62 @@ class Game {
           tm.angle = playerAngle;
         }
         break;
+    }
+
+    // Smart item pickup (when safe and needed)
+    if (!shouldEngage || tm.aiState.suppressionLevel < 30) {
+      for (let i = this.itemDrops.length - 1; i >= 0; i--) {
+        const item = this.itemDrops[i];
+        const distToItem = utils.distance(tm.x, tm.y, item.x, item.y);
+
+        // Pick up items that are useful
+        if (distToItem < 30) {
+          let shouldPickup = false;
+
+          switch (item.type) {
+            case 'health':
+              if (healthPercent < 0.7) shouldPickup = true;
+              break;
+            case 'ammo':
+              if (tm.weapon.reserveAmmo < tm.weapon.magSize * 2) shouldPickup = true;
+              break;
+            case 'grenade':
+              if (!tm.grenades.frag || tm.grenades.frag < 2) shouldPickup = true;
+              break;
+            case 'weapon':
+              // AI can pick up better weapons (simplified: always pick up)
+              shouldPickup = true;
+              break;
+          }
+
+          if (shouldPickup) {
+            switch (item.type) {
+              case 'health':
+                tm.hp = Math.min(100, tm.hp + item.amount);
+                this.itemDrops.splice(i, 1);
+                break;
+              case 'ammo':
+                tm.weapon.reserveAmmo += item.amount;
+                this.itemDrops.splice(i, 1);
+                break;
+              case 'grenade':
+                if (!tm.grenades.frag) tm.grenades.frag = 0;
+                tm.grenades.frag += item.amount;
+                this.itemDrops.splice(i, 1);
+                break;
+            }
+          }
+        } else if (distToItem < 100 && !shouldEngage && healthPercent < 0.5 && item.type === 'health') {
+          // Move toward health packs when low health and safe
+          const moveAngle = utils.angle(tm.x, tm.y, item.x, item.y);
+          const speed = tm.speed * 0.5;
+          const nextX = tm.x + Math.cos(moveAngle) * speed;
+          const nextY = tm.y + Math.sin(moveAngle) * speed;
+          if (!this.level.isSolid(nextX, tm.y)) tm.x = nextX;
+          if (!this.level.isSolid(tm.x, nextY)) tm.y = nextY;
+          break; // Only move toward one item at a time
+        }
+      }
     }
 
     // Update timers and reload
@@ -5267,6 +5469,25 @@ class Game {
   drawOrderIndicators(ctx) {
     for (const tm of this.teammates) {
       if (tm.isAI && !tm.isDead) {
+        // Draw AI state indicators (suppression bar)
+        if (tm.aiState && tm.aiState.suppressionLevel > 20) {
+          const barWidth = 30;
+          const barHeight = 3;
+          const barX = tm.x - barWidth / 2;
+          const barY = tm.y - tm.radius - 50;
+
+          // Background
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillRect(barX, barY, barWidth, barHeight);
+
+          // Suppression level (yellow to red)
+          const suppRatio = Math.min(1, tm.aiState.suppressionLevel / 100);
+          const r = 255;
+          const g = Math.floor(255 * (1 - suppRatio));
+          ctx.fillStyle = `rgb(${r}, ${g}, 0)`;
+          ctx.fillRect(barX, barY, barWidth * suppRatio, barHeight);
+        }
+
         // Draw order icon above teammate's head
         const iconY = tm.y - tm.radius - 35;
         const iconSize = 8;
