@@ -2688,12 +2688,12 @@ class Level {
         );
 
         if (!discovered) {
-          // Completely dark (undiscovered)
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+          // Completely dark (undiscovered) - reduced opacity for better visibility
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
           ctx.fillRect(x, y, gridSize, gridSize);
         } else if (!currentlyVisible) {
-          // Discovered but not currently visible (fog)
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+          // Discovered but not currently visible (fog) - lighter fog
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
           ctx.fillRect(x, y, gridSize, gridSize);
         }
         // If currently visible, don't draw any overlay
