@@ -383,6 +383,78 @@ button {
   letter-spacing: 1px;
 }
 
+/* Score Display */
+.score-container {
+  margin-top: 10px;
+  text-align: left;
+}
+
+.score-label {
+  font-size: 0.7rem;
+  color: #666;
+  letter-spacing: 2px;
+  margin-bottom: 3px;
+}
+
+#score-display {
+  font-size: 1.2rem;
+  color: #ffc107;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* Multiplier Display */
+.multiplier-container {
+  margin-top: 8px;
+  text-align: left;
+}
+
+.multiplier-label {
+  font-size: 0.7rem;
+  color: #666;
+  letter-spacing: 2px;
+  margin-bottom: 3px;
+}
+
+#multiplier-display {
+  font-size: 1.1rem;
+  color: #ff4757;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-shadow: 0 0 10px rgba(255, 71, 87, 0.5);
+}
+
+/* FUN Meter */
+.fun-meter-container {
+  margin-top: 10px;
+  text-align: left;
+}
+
+.fun-label {
+  font-size: 0.7rem;
+  color: #666;
+  letter-spacing: 2px;
+  margin-bottom: 3px;
+}
+
+.fun-meter-bar {
+  width: 120px;
+  height: 10px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.fun-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #ff6b6b 0%, #ffd93d 50%, #6bcf7f 100%);
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+}
+
 /* Enemies */
 #enemies-count {
   font-size: 0.85rem;
