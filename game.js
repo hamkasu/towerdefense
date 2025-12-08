@@ -3370,7 +3370,7 @@ class Enemy {
           vy: -1
         });
         
-        // Occasionally drop power-ups
+        // Occasionally drop power-ups (use plain objects that match ItemDrop interface)
         if (Math.random() < 0.3) { // 30% drop chance
           const dropTypes = ['ammo', 'medkit', 'adrenaline', 'charm'];
           const weights = [0.4, 0.3, 0.2, 0.1]; // ammo most common, charm rarest
@@ -3386,13 +3386,14 @@ class Enemy {
             }
           }
           
-          // Create the drop
+          // Create the drop with all required properties
           let amount = 30;
           if (dropType === 'medkit') amount = 40;
           else if (dropType === 'adrenaline') amount = 1;
           else if (dropType === 'charm') amount = 1;
           
-          window.__game.itemDrops.push({
+          // Create drop object matching ItemDrop structure
+          const drop = {
             type: dropType,
             x: this.x + (Math.random() - 0.5) * 20,
             y: this.y + (Math.random() - 0.5) * 20,
@@ -3400,8 +3401,48 @@ class Enemy {
             collected: false,
             lifetime: 0,
             bobOffset: Math.random() * Math.PI * 2,
-            radius: 12
-          });
+            radius: 12,
+            update: function() { this.lifetime++; },
+            draw: function(ctx) {
+              if (this.collected) return;
+              const bob = Math.sin(this.lifetime * 0.05 + this.bobOffset) * 3;
+              const y = this.y + bob;
+              
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+              ctx.beginPath();
+              ctx.arc(this.x, y + 2, this.radius + 2, 0, Math.PI * 2);
+              ctx.fill();
+              
+              let color = '#ffffff';
+              if (this.type === 'ammo') color = '#f5a623';
+              else if (this.type === 'medkit') color = '#2ecc71';
+              else if (this.type === 'adrenaline') color = '#e74c3c';
+              else if (this.type === 'charm') color = '#9b59b6';
+              
+              ctx.fillStyle = color;
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(this.x, y, this.radius, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+              
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 12px Arial';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              
+              let text = '';
+              if (this.type === 'ammo') text = String(this.amount);
+              else if (this.type === 'medkit') text = '❤';
+              else if (this.type === 'adrenaline') text = '⚡';
+              else if (this.type === 'charm') text = '✨';
+              
+              ctx.fillText(text, this.x, y);
+            }
+          };
+          
+          window.__game.itemDrops.push(drop);
         }
       }
       
