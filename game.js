@@ -1353,6 +1353,9 @@ class ItemDrop {
       case 'ammo': color = '#f5a623'; break;
       case 'grenade': color = '#d0021b'; break;
       case 'health': color = '#7ed321'; break;
+      case 'medkit': color = '#2ecc71'; break;
+      case 'adrenaline': color = '#e74c3c'; break;
+      case 'charm': color = '#9b59b6'; break;
       default: color = '#ffffff';
     }
 
@@ -1381,6 +1384,9 @@ class ItemDrop {
       case 'ammo': text = `${this.amount}`; break;
       case 'grenade': text = this.subtype === 'frag' ? 'G' : 'S'; break;
       case 'health': text = '+'; break;
+      case 'medkit': text = '❤'; break;
+      case 'adrenaline': text = '⚡'; break;
+      case 'charm': text = '✨'; break;
     }
     ctx.fillText(text, this.x, y);
 
@@ -2800,6 +2806,8 @@ class Player {
                CONFIG.PLAYER_SPEED_PRONE;
     if (this.isSprinting && this.stance === 'stand') base *= 1.5;
     if (this.isADS) base *= 0.5;
+    // Apply adrenaline boost
+    if (window.__game && window.__game.adrenalineActive) base *= 1.5;
     return base;
   }
 
@@ -2945,7 +2953,9 @@ class Player {
     if (this.weapon.reserveAmmo <= 0) return;
 
     this.isReloading = true;
-    this.reloadTimer = this.weapon.reloadTime;
+    // Apply adrenaline boost to reload speed
+    const reloadBoost = (window.__game && window.__game.adrenalineActive) ? 0.5 : 1.0;
+    this.reloadTimer = Math.floor(this.weapon.reloadTime * reloadBoost);
     sound.play('reload');
   }
 
@@ -3188,6 +3198,23 @@ class Enemy {
         this.target = player;
         this.state = 'combat';
         this.lastKnownTargetPos = { x: player.x, y: player.y };
+        
+        // Add taunt when spotting player
+        if (window.__game && Math.random() < 0.5) { // 50% chance to taunt
+          const taunts = ['Contact!', 'There!', 'Enemy!', 'Spotted!', 'Target!'];
+          const taunt = taunts[Math.floor(Math.random() * taunts.length)];
+          window.__game.particles.push({
+            type: 'cheer',
+            x: this.x,
+            y: this.y - 20,
+            text: taunt,
+            life: 45,
+            maxLife: 45,
+            color: '#ffaa00',
+            vy: -0.5
+          });
+        }
+        
         return;
       }
     }
@@ -3323,6 +3350,61 @@ class Enemy {
     if (this.hp <= 0) {
       this.hp = 0;
       this.isDead = true;
+      
+      // Award score and trigger combo event
+      if (window.__game) {
+        const points = window.__game.addScore(100); // Base 100 points per kill
+        window.__game.onComboEvent();
+        
+        // Add death quip as cheer particle
+        const deathQuips = ['Argh!', 'Oof!', 'Down!', 'Hit!', '*thud*', 'Noo!'];
+        const quip = deathQuips[Math.floor(Math.random() * deathQuips.length)];
+        window.__game.particles.push({
+          type: 'cheer',
+          x: this.x,
+          y: this.y - 20,
+          text: quip,
+          life: 60,
+          maxLife: 60,
+          color: '#ff6b6b',
+          vy: -1
+        });
+        
+        // Occasionally drop power-ups
+        if (Math.random() < 0.3) { // 30% drop chance
+          const dropTypes = ['ammo', 'medkit', 'adrenaline', 'charm'];
+          const weights = [0.4, 0.3, 0.2, 0.1]; // ammo most common, charm rarest
+          
+          let rand = Math.random();
+          let dropType = 'ammo';
+          let cumulative = 0;
+          for (let i = 0; i < dropTypes.length; i++) {
+            cumulative += weights[i];
+            if (rand < cumulative) {
+              dropType = dropTypes[i];
+              break;
+            }
+          }
+          
+          // Create the drop
+          let amount = 30;
+          if (dropType === 'medkit') amount = 40;
+          else if (dropType === 'adrenaline') amount = 1;
+          else if (dropType === 'charm') amount = 1;
+          
+          window.__game.itemDrops.push({
+            type: dropType,
+            x: this.x + (Math.random() - 0.5) * 20,
+            y: this.y + (Math.random() - 0.5) * 20,
+            amount: amount,
+            collected: false,
+            lifetime: 0,
+            bobOffset: Math.random() * Math.PI * 2,
+            radius: 12
+          });
+        }
+      }
+      
       return true;
     }
 
@@ -3662,6 +3744,26 @@ class Game {
     this.isMultiplayer = false;
     this.remotePlayers = new Map(); // Map of playerId -> Player object
     this.playerIdToEntity = new Map(); // Map server playerId to local Player objects
+
+    // Score & Combo system
+    this.score = 0;
+    this.multiplier = 1;
+    this.comboTimer = 0;
+    this.comboWindow = 300; // frames (~5 seconds at 60fps)
+
+    // FUN meter system
+    this.funMeter = 0; // 0-100
+    this.funActive = false;
+    this.funTimer = 0;
+    this.funDuration = 240; // ~4 seconds
+
+    // Power-up effects
+    this.adrenalineActive = false;
+    this.adrenalineTimer = 0;
+    this.adrenalineDuration = 360; // ~6 seconds
+
+    // Global reference for Enemy class
+    window.__game = this;
 
     this.bindEvents();
     this.bindMultiplayerEvents();
@@ -4308,8 +4410,28 @@ class Game {
     }
     this.explosionEffects = this.explosionEffects.filter(e => !e.dead);
 
-    // Update particles
-    for (const p of this.particles) p.update();
+    // Update particles (with special logic for new types)
+    for (const p of this.particles) {
+      if (p.type === 'confetti') {
+        // Update confetti physics
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.15; // Gravity
+        p.vx *= 0.98;
+        p.vy *= 0.98;
+        if (p.rotation !== undefined) {
+          p.rotation += p.rotSpeed || 0;
+        }
+        p.life--;
+      } else if (p.type === 'cheer') {
+        // Update cheer text (floats upward)
+        p.y += p.vy || -0.5;
+        p.life--;
+      } else {
+        // Standard particle update
+        p.update();
+      }
+    }
     this.particles = this.particles.filter(p => p.life > 0);
 
     // Update shell casings
@@ -4322,6 +4444,78 @@ class Game {
     // Update effects
     if (this.flashOverlay > 0) this.flashOverlay -= 3;
     if (this.screenShake > 0) this.screenShake *= 0.9;
+
+    // Update combo timer (decay multiplier when timer expires)
+    if (this.comboTimer > 0) {
+      this.comboTimer--;
+      if (this.comboTimer === 0) {
+        // Reset multiplier when combo expires
+        this.multiplier = Math.max(1, this.multiplier - 1);
+      }
+    }
+
+    // Update FUN meter system
+    if (this.funMeter >= 100 && !this.funActive) {
+      // Activate FUN mode!
+      this.funActive = true;
+      this.funTimer = this.funDuration;
+      this.funMeter = 0; // Reset meter
+      
+      // Show cheer message
+      if (this.player) {
+        this.particles.push({
+          type: 'cheer',
+          x: this.player.x,
+          y: this.player.y - 40,
+          text: '🎉 FUN MODE! 🎉',
+          life: 120,
+          maxLife: 120,
+          color: '#ffd700',
+          vy: -0.5,
+          size: 20
+        });
+      }
+    }
+
+    // Update FUN mode timer
+    if (this.funActive) {
+      this.funTimer--;
+      
+      // Spawn confetti periodically
+      if (this.funTimer % 10 === 0 && this.player) {
+        const colors = ['#ff6b6b', '#ffd93d', '#6bcf7f', '#4d96ff', '#ff6bff'];
+        for (let i = 0; i < 3; i++) {
+          this.particles.push({
+            type: 'confetti',
+            x: this.player.x + (Math.random() - 0.5) * 60,
+            y: this.player.y + (Math.random() - 0.5) * 60,
+            vx: (Math.random() - 0.5) * 4,
+            vy: (Math.random() - 0.5) * 4 - 2,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            life: 60,
+            maxLife: 60,
+            size: 4,
+            rotation: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 0.3
+          });
+        }
+      }
+      
+      if (this.funTimer <= 0) {
+        this.funActive = false;
+      }
+    }
+
+    // Update adrenaline effect
+    if (this.adrenalineActive) {
+      this.adrenalineTimer--;
+      if (this.adrenalineTimer <= 0) {
+        this.adrenalineActive = false;
+      }
+    }
+
+    // Handle item pickups for player
+    this.handleItemPickups();
 
     // Check mission status
     this.checkMissionStatus();
@@ -4730,6 +4924,74 @@ class Game {
     return orderType;
   }
 
+  // Score and Combo System Methods
+  addScore(basePoints) {
+    const points = Math.floor(basePoints * this.multiplier);
+    this.score += points;
+    this.funMeter = Math.min(100, this.funMeter + (points / 50)); // Gain fun meter with score
+    return points;
+  }
+
+  onComboEvent() {
+    // Extend combo timer
+    this.comboTimer = this.comboWindow;
+    
+    // Increase multiplier (max x9)
+    if (this.multiplier < 9) {
+      this.multiplier = Math.min(9, this.multiplier + 0.5);
+    }
+  }
+
+  // Power-up Methods
+  applyAdrenaline() {
+    this.adrenalineActive = true;
+    this.adrenalineTimer = this.adrenalineDuration;
+    // Boost will be applied in player update logic
+  }
+
+  // Item pickup handler
+  handleItemPickups() {
+    if (!this.player || this.player.isDead) return;
+
+    for (let i = this.itemDrops.length - 1; i >= 0; i--) {
+      const drop = this.itemDrops[i];
+      if (drop.collected) continue;
+
+      const dist = utils.distance(this.player.x, this.player.y, drop.x, drop.y);
+      if (dist < 40) {
+        // Pickup logic based on drop type
+        let pickedUp = false;
+
+        if (drop.type === 'ammo') {
+          // Refill mag and add to reserve
+          if (this.player.weapon.ammo < this.player.weapon.magSize || this.player.weapon.reserveAmmo < this.player.weapon.magSize * 3) {
+            this.player.weapon.ammo = this.player.weapon.magSize;
+            this.player.weapon.reserveAmmo += drop.amount;
+            pickedUp = true;
+          }
+        } else if (drop.type === 'medkit') {
+          if (this.player.hp < 100) {
+            this.player.hp = Math.min(100, this.player.hp + drop.amount);
+            pickedUp = true;
+          }
+        } else if (drop.type === 'adrenaline') {
+          this.applyAdrenaline();
+          pickedUp = true;
+        } else if (drop.type === 'charm') {
+          this.multiplier = Math.min(9, this.multiplier + 2);
+          this.comboTimer = this.comboWindow; // Extend combo
+          this.funMeter = Math.min(100, this.funMeter + 20);
+          pickedUp = true;
+        }
+
+        if (pickedUp) {
+          drop.collected = true;
+          this.itemDrops.splice(i, 1);
+        }
+      }
+    }
+  }
+
   switchToSoldier(index) {
     // Validate index
     if (index < 0 || index >= this.teammates.length) return false;
@@ -5086,6 +5348,37 @@ class Game {
     if (formationEl) {
       formationEl.textContent = CONFIG.FORMATIONS[this.currentFormation].name;
     }
+
+    // Update score display
+    const scoreEl = document.getElementById('score-display');
+    if (scoreEl) {
+      scoreEl.textContent = this.score.toLocaleString();
+    }
+
+    // Update multiplier display
+    const multiplierEl = document.getElementById('multiplier-display');
+    if (multiplierEl) {
+      multiplierEl.textContent = `x${this.multiplier.toFixed(1)}`;
+      // Add pulse effect when high multiplier
+      if (this.multiplier >= 5) {
+        multiplierEl.style.textShadow = '0 0 15px rgba(255, 71, 87, 0.8)';
+      } else {
+        multiplierEl.style.textShadow = '0 0 10px rgba(255, 71, 87, 0.5)';
+      }
+    }
+
+    // Update FUN meter
+    const funFillEl = document.getElementById('fun-fill');
+    if (funFillEl) {
+      funFillEl.style.width = `${this.funMeter}%`;
+      // Pulse when active
+      if (this.funActive) {
+        const pulse = Math.sin(Date.now() / 100) * 0.2 + 0.8;
+        funFillEl.style.opacity = pulse;
+      } else {
+        funFillEl.style.opacity = '1';
+      }
+    }
   }
 
   draw() {
@@ -5153,8 +5446,39 @@ class Game {
     // Bullets
     for (const bullet of this.bullets) bullet.draw(ctx);
 
-    // Particles
-    for (const p of this.particles) p.draw(ctx);
+    // Particles (with special rendering for new types)
+    for (const p of this.particles) {
+      if (p.type === 'confetti') {
+        // Confetti particles (colored squares rotating)
+        const alpha = p.life / p.maxLife;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation || 0);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      } else if (p.type === 'cheer') {
+        // Cheer text particles (floating text)
+        const alpha = p.life / p.maxLife;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.font = `bold ${p.size || 12}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.strokeText(p.text, p.x, p.y);
+        ctx.fillText(p.text, p.x, p.y);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      } else {
+        // Standard particle drawing
+        p.draw(ctx);
+      }
+    }
 
     // Item drops
     for (const drop of this.itemDrops) drop.draw(ctx);
