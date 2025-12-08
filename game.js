@@ -4490,8 +4490,8 @@ class Game {
     if (this.comboTimer > 0) {
       this.comboTimer--;
       if (this.comboTimer === 0) {
-        // Reset multiplier when combo expires
-        this.multiplier = Math.max(1, this.multiplier - 1);
+        // Reset multiplier when combo expires (use same step as increase)
+        this.multiplier = Math.max(1, this.multiplier - 0.5);
       }
     }
 
@@ -4978,9 +4978,7 @@ class Game {
     this.comboTimer = this.comboWindow;
     
     // Increase multiplier (max x9)
-    if (this.multiplier < 9) {
-      this.multiplier = Math.min(9, this.multiplier + 0.5);
-    }
+    this.multiplier = Math.min(9, this.multiplier + 0.5);
   }
 
   // Power-up Methods
