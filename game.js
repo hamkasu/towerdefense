@@ -6536,9 +6536,50 @@ class Game {
     const statHp = document.getElementById('stat-hp');
     const statArmor = document.getElementById('stat-armor');
     const statSpeed = document.getElementById('stat-speed');
+    const statAccuracy = document.getElementById('stat-accuracy');
     if (statHp) statHp.textContent = Math.round(this.player.hp);
     if (statArmor) statArmor.textContent = this.player.armor;
     if (statSpeed) statSpeed.textContent = `${Math.round(this.player.getSpeedMultiplier() * 100)}%`;
+    if (statAccuracy) statAccuracy.textContent = `${Math.round(this.player.getAccuracyMultiplier() * 100)}%`;
+
+    const gearHudList = document.getElementById('gear-hud-list');
+    if (gearHudList && this.player.gear) {
+      const gearItems = [];
+      
+      if (this.player.weapons && this.player.weapons.length > 0) {
+        const weaponNames = this.player.weapons.map(w => CONFIG.WEAPONS[w]?.name || w).join(' + ');
+        gearItems.push(`<span class="gear-item-hud weapon" title="Weapons">${weaponNames}</span>`);
+      }
+      
+      if (this.player.gear.body) {
+        const bodyGear = CONFIG.GEAR[this.player.gear.body];
+        if (bodyGear) {
+          gearItems.push(`<span class="gear-item-hud armor" title="Body Armor">${bodyGear.name}</span>`);
+        }
+      }
+      
+      if (this.player.gear.head) {
+        const headGear = CONFIG.GEAR[this.player.gear.head];
+        if (headGear) {
+          gearItems.push(`<span class="gear-item-hud armor" title="Helmet">${headGear.name}</span>`);
+        }
+      }
+      
+      if (this.player.gear.tactical) {
+        const tactGear = CONFIG.GEAR[this.player.gear.tactical];
+        if (tactGear) {
+          let tactName = tactGear.name;
+          if (tactGear.grenades) {
+            const grenadeType = Object.keys(tactGear.grenades)[0];
+            const count = this.player.grenades[grenadeType] || 0;
+            tactName = `${grenadeType.charAt(0).toUpperCase() + grenadeType.slice(1)} x${count}`;
+          }
+          gearItems.push(`<span class="gear-item-hud tactical" title="Tactical">${tactName}</span>`);
+        }
+      }
+      
+      gearHudList.innerHTML = gearItems.join('');
+    }
 
     // Update formation display
     const formationEl = document.getElementById('formation-text');

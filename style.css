@@ -1298,3 +1298,48 @@ button {
   background: linear-gradient(90deg, #4a7cc9 0%, #74c0fc 100%);
   transition: width 0.2s ease;
 }
+
+/* Gear display in HUD */
+.soldier-gear-hud {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gear-hud-label {
+  font-size: 0.55rem;
+  color: #666;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.gear-hud-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gear-item-hud {
+  font-size: 0.65rem;
+  color: #aaa;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px 6px;
+  border-radius: 2px;
+  border: 1px solid #333;
+  white-space: nowrap;
+}
+
+.gear-item-hud.weapon {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.3);
+}
+
+.gear-item-hud.armor {
+  color: #74c0fc;
+  border-color: rgba(116, 192, 252, 0.3);
+}
+
+.gear-item-hud.tactical {
+  color: #ffa94d;
+  border-color: rgba(255, 169, 77, 0.3);
+}
