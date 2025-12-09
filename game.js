@@ -3393,233 +3393,516 @@ class Level {
   }
 
   drawDecorations(ctx) {
+    const seed = (x, y, n) => ((x * 12345 + y * 67890 + n * 11111) % 1000) / 1000;
 
-    // Decorations (vegetation, crates, barrels, etc.)
     for (const dec of this.decorations) {
       ctx.save();
       ctx.translate(dec.x, dec.y);
       ctx.rotate(dec.rotation);
       ctx.scale(dec.scale, dec.scale);
 
+      const decSeed = seed(dec.x, dec.y, 0);
+
       switch(dec.type) {
-        case 'tree':
-          // Tree trunk
-          ctx.fillStyle = '#4a3520';
+        case 'tree': {
+          const treeOffset = (decSeed - 0.5) * 6;
+          ctx.fillStyle = 'rgba(0,0,0,0.35)';
+          ctx.beginPath();
+          ctx.ellipse(5 + treeOffset, 5, 38 + decSeed * 4, 30, 0.2, 0, Math.PI * 2);
+          ctx.fill();
+
+          const trunkGrad = ctx.createLinearGradient(-8, 0, 8, 0);
+          trunkGrad.addColorStop(0, '#3a2510');
+          trunkGrad.addColorStop(0.5, '#5c4033');
+          trunkGrad.addColorStop(1, '#4a3020');
+          ctx.fillStyle = trunkGrad;
           ctx.fillRect(-8, -8, 16, 16);
-          // Foliage (layered circles for depth)
-          ctx.fillStyle = '#1a5c1a';
-          ctx.beginPath();
-          ctx.arc(0, -15, 35, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#228b22';
-          ctx.beginPath();
-          ctx.arc(-10, -20, 25, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(12, -18, 22, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#2d8b2d';
-          ctx.beginPath();
-          ctx.arc(0, -25, 20, 0, Math.PI * 2);
-          ctx.fill();
-          break;
+          ctx.strokeStyle = '#2a1808';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(-8, -8, 16, 16);
 
-        case 'palm':
-          // Palm trunk
-          ctx.fillStyle = '#5c4033';
+          if (decSeed > 0.4) {
+            ctx.strokeStyle = 'rgba(30,15,5,0.4)';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(-6, -6 + decSeed * 4);
+            ctx.lineTo(-4, 6);
+            ctx.stroke();
+          }
+
+          const foliageLayers = [
+            { x: 0 + treeOffset * 0.5, y: -15, r: 35 + decSeed * 3, color1: '#0f4a0f', color2: '#1a5c1a' },
+            { x: -10 + treeOffset, y: -20, r: 25 + decSeed * 2, color1: '#1a6b1a', color2: '#228b22' },
+            { x: 12 - treeOffset, y: -18, r: 22 + decSeed * 2, color1: '#1a6b1a', color2: '#228b22' },
+            { x: 0, y: -25 - decSeed * 3, r: 20, color1: '#228b22', color2: '#32ab32' }
+          ];
+          for (let i = 0; i < foliageLayers.length; i++) {
+            const layer = foliageLayers[i];
+            const tint = Math.floor(decSeed * 20) - 10;
+            const grad = ctx.createRadialGradient(layer.x - 5, layer.y - 5, 0, layer.x, layer.y, layer.r);
+            grad.addColorStop(0, layer.color2);
+            grad.addColorStop(0.7, layer.color1);
+            grad.addColorStop(1, '#0a3a0a');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(layer.x, layer.y, layer.r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          break;
+        }
+
+        case 'palm': {
+          const palmRotOffset = (decSeed - 0.5) * 0.4;
+          ctx.fillStyle = 'rgba(0,0,0,0.3)';
+          ctx.beginPath();
+          ctx.ellipse(4, 20, 8, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          const palmTrunkGrad = ctx.createLinearGradient(-6, 0, 6, 0);
+          palmTrunkGrad.addColorStop(0, '#3a2518');
+          palmTrunkGrad.addColorStop(0.5, '#5c4033');
+          palmTrunkGrad.addColorStop(1, '#4a3525');
+          ctx.fillStyle = palmTrunkGrad;
           ctx.fillRect(-6, -10, 12, 30);
-          // Palm fronds
-          ctx.fillStyle = '#228b22';
-          for (let i = 0; i < 6; i++) {
-            ctx.save();
-            ctx.rotate(i * Math.PI / 3);
+          ctx.strokeStyle = '#2a1808';
+          ctx.lineWidth = 1;
+          const ringSpacing = 5 + decSeed * 2;
+          for (let ty = -8; ty < 18; ty += ringSpacing) {
             ctx.beginPath();
-            ctx.ellipse(0, -40, 8, 35, 0, 0, Math.PI * 2);
+            ctx.moveTo(-6, ty);
+            ctx.lineTo(6, ty);
+            ctx.stroke();
+          }
+
+          const numFronds = 5 + Math.floor(decSeed * 2);
+          for (let i = 0; i < numFronds; i++) {
+            ctx.save();
+            ctx.rotate(i * Math.PI / 3 + palmRotOffset);
+            const frondLen = 33 + decSeed * 6;
+            const frondGrad = ctx.createLinearGradient(0, 0, 0, -40);
+            frondGrad.addColorStop(0, '#1a5c1a');
+            frondGrad.addColorStop(1, '#32ab32');
+            ctx.fillStyle = frondGrad;
+            ctx.beginPath();
+            ctx.ellipse(0, -40, 7 + decSeed, frondLen, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
           }
-          ctx.fillStyle = '#2d9b2d';
-          for (let i = 0; i < 6; i++) {
+          for (let i = 0; i < numFronds; i++) {
             ctx.save();
-            ctx.rotate(i * Math.PI / 3 + 0.3);
+            ctx.rotate(i * Math.PI / 3 + 0.3 + palmRotOffset);
+            const frondLen2 = 26 + decSeed * 4;
+            const frondGrad2 = ctx.createLinearGradient(0, 0, 0, -35);
+            frondGrad2.addColorStop(0, '#228b22');
+            frondGrad2.addColorStop(1, '#4aca4a');
+            ctx.fillStyle = frondGrad2;
             ctx.beginPath();
-            ctx.ellipse(0, -35, 6, 28, 0, 0, Math.PI * 2);
+            ctx.ellipse(0, -35, 5 + decSeed, frondLen2, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
           }
           break;
+        }
 
-        case 'bush':
-          // Bush variants with different shapes
-          const bushColors = ['#228b22', '#2d8b2d', '#1a6b1a'];
-          ctx.fillStyle = bushColors[dec.variant % 3];
+        case 'bush': {
+          const bushTint = Math.floor(decSeed * 30) - 15;
+          const bushSize = 1 + (decSeed - 0.5) * 0.15;
+          ctx.fillStyle = 'rgba(0,0,0,0.3)';
+          ctx.beginPath();
+          ctx.ellipse(4, 4, 28 * bushSize, 20, 0, 0, Math.PI * 2);
+          ctx.fill();
+
           if (dec.variant === 0) {
-            // Round bush
+            const bushRad = 25 * bushSize;
+            const bushGrad = ctx.createRadialGradient(-5, -5, 0, 0, 0, bushRad);
+            bushGrad.addColorStop(0, `rgb(${66 + bushTint}, ${187 + bushTint}, ${66 + bushTint})`);
+            bushGrad.addColorStop(0.5, `rgb(${34 + bushTint}, ${139 + bushTint}, ${34 + bushTint})`);
+            bushGrad.addColorStop(1, '#0f4a0f');
+            ctx.fillStyle = bushGrad;
             ctx.beginPath();
-            ctx.arc(0, 0, 25, 0, Math.PI * 2);
+            ctx.arc(0, 0, bushRad, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = '#32ab32';
+            const innerRad = 15 * bushSize;
+            const innerGrad = ctx.createRadialGradient(-8, -8, 0, -5, -5, innerRad);
+            innerGrad.addColorStop(0, `rgb(${82 + bushTint}, ${203 + bushTint}, ${82 + bushTint})`);
+            innerGrad.addColorStop(1, `rgb(${50 + bushTint}, ${171 + bushTint}, ${50 + bushTint})`);
+            ctx.fillStyle = innerGrad;
             ctx.beginPath();
-            ctx.arc(-5, -5, 15, 0, Math.PI * 2);
+            ctx.arc(-5, -5, innerRad, 0, Math.PI * 2);
             ctx.fill();
           } else if (dec.variant === 1) {
-            // Cluster bush
-            ctx.beginPath();
-            ctx.arc(-10, 0, 18, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(10, 5, 16, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#32ab32';
-            ctx.beginPath();
-            ctx.arc(0, -5, 14, 0, Math.PI * 2);
-            ctx.fill();
+            const clusterOffset = (decSeed - 0.5) * 4;
+            const clusterPositions = [
+              { x: -10 + clusterOffset, y: 0, r: 18 * bushSize },
+              { x: 10 - clusterOffset, y: 5, r: 16 * bushSize },
+              { x: 0, y: -5 + clusterOffset, r: 14 * bushSize }
+            ];
+            for (let i = 0; i < clusterPositions.length; i++) {
+              const pos = clusterPositions[i];
+              const cGrad = ctx.createRadialGradient(pos.x - 3, pos.y - 3, 0, pos.x, pos.y, pos.r);
+              cGrad.addColorStop(0, i === 2 ? `rgb(${82 + bushTint}, ${203 + bushTint}, ${82 + bushTint})` : `rgb(${66 + bushTint}, ${187 + bushTint}, ${66 + bushTint})`);
+              cGrad.addColorStop(0.6, `rgb(${34 + bushTint}, ${139 + bushTint}, ${34 + bushTint})`);
+              cGrad.addColorStop(1, '#0f4a0f');
+              ctx.fillStyle = cGrad;
+              ctx.beginPath();
+              ctx.arc(pos.x, pos.y, pos.r, 0, Math.PI * 2);
+              ctx.fill();
+            }
           } else {
-            // Spiky bush
+            const spikeCount = 7 + Math.floor(decSeed * 3);
+            const spikyGrad = ctx.createRadialGradient(0, -5, 0, 0, 0, 25 * bushSize);
+            spikyGrad.addColorStop(0, `rgb(${66 + bushTint}, ${187 + bushTint}, ${66 + bushTint})`);
+            spikyGrad.addColorStop(0.6, `rgb(${34 + bushTint}, ${139 + bushTint}, ${34 + bushTint})`);
+            spikyGrad.addColorStop(1, '#0f4a0f');
+            ctx.fillStyle = spikyGrad;
             ctx.beginPath();
-            ctx.moveTo(0, -25);
-            for (let i = 0; i < 8; i++) {
-              const angle = (i / 8) * Math.PI * 2 - Math.PI / 2;
-              const r = i % 2 === 0 ? 25 : 15;
+            ctx.moveTo(0, -25 * bushSize);
+            for (let i = 0; i < spikeCount; i++) {
+              const angle = (i / spikeCount) * Math.PI * 2 - Math.PI / 2;
+              const r = (i % 2 === 0 ? 25 : 15) * bushSize;
               ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
             }
             ctx.closePath();
             ctx.fill();
           }
           break;
+        }
 
-        case 'fern':
-          // Small fern plants
-          ctx.fillStyle = dec.variant === 0 ? '#3a7a3a' : '#2a6a2a';
-          for (let i = 0; i < 5; i++) {
+        case 'fern': {
+          const fernCount = 4 + Math.floor(decSeed * 3);
+          const fernTint = Math.floor(decSeed * 20) - 10;
+          const fernSize = 1 + (decSeed - 0.5) * 0.2;
+          ctx.fillStyle = 'rgba(0,0,0,0.2)';
+          ctx.beginPath();
+          ctx.ellipse(2, 2, 15 * fernSize, 10 * fernSize, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          for (let i = 0; i < fernCount; i++) {
             ctx.save();
-            ctx.rotate(i * Math.PI / 2.5 - Math.PI / 2);
+            ctx.rotate(i * Math.PI / (fernCount * 0.5) - Math.PI / 2 + (decSeed - 0.5) * 0.3);
+            const fernLen = (10 + decSeed * 4) * fernSize;
+            const fernGrad = ctx.createLinearGradient(0, 0, 0, -fernLen);
+            fernGrad.addColorStop(0, `rgb(${42 + fernTint}, ${90 + fernTint}, ${42 + fernTint})`);
+            fernGrad.addColorStop(1, `rgb(${74 + fernTint}, ${154 + fernTint}, ${74 + fernTint})`);
+            ctx.fillStyle = fernGrad;
             ctx.beginPath();
-            ctx.ellipse(0, -12, 3, 12, 0, 0, Math.PI * 2);
+            ctx.ellipse(0, -fernLen, 2 + decSeed, fernLen, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
           }
           break;
+        }
 
-        case 'log':
-          // Fallen tree log
-          ctx.fillStyle = '#5c4033';
+        case 'log': {
+          ctx.fillStyle = 'rgba(0,0,0,0.35)';
+          ctx.beginPath();
+          ctx.ellipse(0, 15, 52, 10, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          const logGrad = ctx.createLinearGradient(0, -10, 0, 10);
+          logGrad.addColorStop(0, '#6b5040');
+          logGrad.addColorStop(0.5, '#5c4033');
+          logGrad.addColorStop(1, '#3a2518');
+          ctx.fillStyle = logGrad;
           ctx.fillRect(-50, -10, 100, 20);
-          ctx.fillStyle = '#4a3520';
+          ctx.strokeStyle = '#2a1808';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(-50, -10, 100, 20);
+
+          ctx.strokeStyle = '#3a2510';
+          ctx.lineWidth = 0.5;
+          for (let lx = -45; lx < 45; lx += 8 + decSeed * 4) {
+            ctx.beginPath();
+            ctx.moveTo(lx, -8);
+            ctx.lineTo(lx, 8);
+            ctx.stroke();
+          }
+
+          const endGrad1 = ctx.createRadialGradient(-50, 0, 0, -50, 0, 10);
+          endGrad1.addColorStop(0, '#8b7050');
+          endGrad1.addColorStop(0.5, '#5c4033');
+          endGrad1.addColorStop(1, '#3a2518');
+          ctx.fillStyle = endGrad1;
           ctx.beginPath();
           ctx.arc(-50, 0, 10, 0, Math.PI * 2);
           ctx.fill();
-          ctx.fillStyle = '#6b5040';
+
+          const endGrad2 = ctx.createRadialGradient(50, 0, 0, 50, 0, 10);
+          endGrad2.addColorStop(0, '#9b8060');
+          endGrad2.addColorStop(0.5, '#6b5040');
+          endGrad2.addColorStop(1, '#4a3525');
+          ctx.fillStyle = endGrad2;
           ctx.beginPath();
           ctx.arc(50, 0, 10, 0, Math.PI * 2);
           ctx.fill();
-          // Wood rings
+
           ctx.strokeStyle = '#3a2510';
           ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.arc(-50, 0, 4, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(-50, 0, 7, 0, Math.PI * 2);
-          ctx.stroke();
+          for (let r = 3; r < 9; r += 2) {
+            ctx.beginPath();
+            ctx.arc(-50, 0, r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(50, 0, r, 0, Math.PI * 2);
+            ctx.stroke();
+          }
           break;
+        }
 
-        case 'barrel':
-          // Metal/oil barrel
-          ctx.fillStyle = dec.variant === 0 ? '#4a4a5a' : '#5a4a3a';
+        case 'barrel': {
+          ctx.fillStyle = 'rgba(0,0,0,0.4)';
+          ctx.beginPath();
+          ctx.ellipse(4, 4, 16, 13, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          const baseColor = dec.variant === 0 ? [74, 74, 90] : [90, 74, 58];
+          const barrelGrad = ctx.createRadialGradient(-5, -4, 0, 0, 0, 15);
+          barrelGrad.addColorStop(0, `rgb(${baseColor[0] + 40}, ${baseColor[1] + 40}, ${baseColor[2] + 40})`);
+          barrelGrad.addColorStop(0.5, `rgb(${baseColor[0]}, ${baseColor[1]}, ${baseColor[2]})`);
+          barrelGrad.addColorStop(1, `rgb(${baseColor[0] - 30}, ${baseColor[1] - 30}, ${baseColor[2] - 30})`);
+          ctx.fillStyle = barrelGrad;
           ctx.beginPath();
           ctx.ellipse(0, 0, 15, 12, 0, 0, Math.PI * 2);
           ctx.fill();
-          // Barrel bands
-          ctx.strokeStyle = '#2a2a2a';
-          ctx.lineWidth = 2;
+
+          ctx.strokeStyle = '#1a1a1a';
+          ctx.lineWidth = 2.5;
           ctx.beginPath();
           ctx.ellipse(0, -6, 14, 4, 0, 0, Math.PI * 2);
           ctx.stroke();
           ctx.beginPath();
           ctx.ellipse(0, 6, 14, 4, 0, 0, Math.PI * 2);
           ctx.stroke();
-          // Top highlight
-          ctx.fillStyle = dec.variant === 0 ? '#5a5a6a' : '#6a5a4a';
+
+          const topGrad = ctx.createRadialGradient(-3, -4, 0, 0, -2, 10);
+          topGrad.addColorStop(0, `rgb(${baseColor[0] + 60}, ${baseColor[1] + 60}, ${baseColor[2] + 60})`);
+          topGrad.addColorStop(1, `rgb(${baseColor[0] + 20}, ${baseColor[1] + 20}, ${baseColor[2] + 20})`);
+          ctx.fillStyle = topGrad;
           ctx.beginPath();
           ctx.ellipse(0, -2, 10, 6, 0, 0, Math.PI * 2);
           ctx.fill();
-          break;
 
-        case 'sandbag':
-          // Sandbag barrier
-          ctx.fillStyle = '#8b7355';
-          // Bottom row
-          ctx.beginPath();
-          ctx.ellipse(-18, 5, 16, 8, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(0, 5, 16, 8, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(18, 5, 16, 8, 0, 0, Math.PI * 2);
-          ctx.fill();
-          // Top row
-          ctx.fillStyle = '#9b8365';
-          ctx.beginPath();
-          ctx.ellipse(-10, -5, 16, 8, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(10, -5, 16, 8, 0, 0, Math.PI * 2);
-          ctx.fill();
+          if (decSeed > 0.6) {
+            ctx.strokeStyle = 'rgba(80,60,40,0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-8 + decSeed * 4, -10);
+            ctx.lineTo(-6 + decSeed * 3, 8);
+            ctx.stroke();
+          }
           break;
+        }
 
-        case 'crate':
-          // Wooden crate
-          ctx.fillStyle = '#6b5030';
+        case 'sandbag': {
+          const bagTint = Math.floor(decSeed * 20) - 10;
+          const bagWear = decSeed > 0.6;
+          ctx.fillStyle = 'rgba(0,0,0,0.35)';
+          ctx.beginPath();
+          ctx.ellipse(0, 12, 40, 12, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          const bagOffset = (decSeed - 0.5) * 3;
+          const bagPositions = [
+            { x: -18 + bagOffset, y: 5, rx: 15 + decSeed, ry: 8, light: false },
+            { x: 0, y: 5 + bagOffset * 0.5, rx: 16, ry: 7 + decSeed, light: false },
+            { x: 18 - bagOffset, y: 5, rx: 15 + decSeed, ry: 8, light: false },
+            { x: -10 + bagOffset * 0.5, y: -5, rx: 15 + decSeed, ry: 8, light: true },
+            { x: 10 - bagOffset * 0.5, y: -5, rx: 15 + decSeed, ry: 8, light: true }
+          ];
+          for (let bi = 0; bi < bagPositions.length; bi++) {
+            const bag = bagPositions[bi];
+            const bagGrad = ctx.createRadialGradient(bag.x - 4, bag.y - 3, 0, bag.x, bag.y, bag.rx);
+            if (bag.light) {
+              bagGrad.addColorStop(0, `rgb(${184 + bagTint}, ${160 + bagTint}, ${128 + bagTint})`);
+              bagGrad.addColorStop(0.5, `rgb(${155 + bagTint}, ${131 + bagTint}, ${101 + bagTint})`);
+              bagGrad.addColorStop(1, `rgb(${107 + bagTint}, ${83 + bagTint}, ${53 + bagTint})`);
+            } else {
+              bagGrad.addColorStop(0, `rgb(${168 + bagTint}, ${144 + bagTint}, ${96 + bagTint})`);
+              bagGrad.addColorStop(0.5, `rgb(${139 + bagTint}, ${115 + bagTint}, ${85 + bagTint})`);
+              bagGrad.addColorStop(1, `rgb(${91 + bagTint}, ${67 + bagTint}, ${37 + bagTint})`);
+            }
+            ctx.fillStyle = bagGrad;
+            ctx.beginPath();
+            ctx.ellipse(bag.x, bag.y, bag.rx, bag.ry, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(60,40,20,0.4)';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.ellipse(bag.x, bag.y, bag.rx, bag.ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            if (bagWear && bi < 3) {
+              ctx.strokeStyle = 'rgba(80,60,30,0.3)';
+              ctx.lineWidth = 0.5;
+              ctx.beginPath();
+              ctx.moveTo(bag.x - 6 + decSeed * 4, bag.y - 3);
+              ctx.lineTo(bag.x - 4 + decSeed * 3, bag.y + 3);
+              ctx.stroke();
+            }
+          }
+          break;
+        }
+
+        case 'crate': {
+          ctx.fillStyle = 'rgba(0,0,0,0.4)';
+          ctx.fillRect(-16, -16, 40, 40);
+
+          const crateGrad = ctx.createLinearGradient(-20, -20, 20, 20);
+          crateGrad.addColorStop(0, '#8b7050');
+          crateGrad.addColorStop(0.3, '#7b6040');
+          crateGrad.addColorStop(0.7, '#6b5030');
+          crateGrad.addColorStop(1, '#4a3520');
+          ctx.fillStyle = crateGrad;
           ctx.fillRect(-20, -20, 40, 40);
+
+          ctx.strokeStyle = '#3a2010';
+          ctx.lineWidth = 1;
+          for (let py = -18; py < 18; py += 5) {
+            ctx.beginPath();
+            ctx.moveTo(-20, py);
+            ctx.lineTo(20, py);
+            ctx.stroke();
+          }
+
           ctx.strokeStyle = '#4a3020';
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 3;
           ctx.strokeRect(-20, -20, 40, 40);
-          // Cross pattern
+          ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.moveTo(-20, 0);
           ctx.lineTo(20, 0);
           ctx.moveTo(0, -20);
           ctx.lineTo(0, 20);
           ctx.stroke();
-          break;
 
-        case 'crate_ammo':
-          // Ammo crate (green markings)
-          ctx.fillStyle = '#5a5030';
+          ctx.fillStyle = 'rgba(120,100,70,0.3)';
+          ctx.fillRect(-18, -18, 8, 8);
+
+          if (decSeed > 0.5) {
+            ctx.strokeStyle = 'rgba(40,25,10,0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-15 + decSeed * 10, -18);
+            ctx.lineTo(-12 + decSeed * 8, 18);
+            ctx.stroke();
+          }
+          break;
+        }
+
+        case 'crate_ammo': {
+          const ammoTint = Math.floor(decSeed * 15) - 7;
+          ctx.fillStyle = 'rgba(0,0,0,0.4)';
+          ctx.fillRect(-18, -14, 44, 36);
+
+          const ammoGrad = ctx.createLinearGradient(-22, -18, 22, 18);
+          ammoGrad.addColorStop(0, `rgb(${106 + ammoTint}, ${96 + ammoTint}, ${64 + ammoTint})`);
+          ammoGrad.addColorStop(0.5, `rgb(${90 + ammoTint}, ${80 + ammoTint}, ${48 + ammoTint})`);
+          ammoGrad.addColorStop(1, `rgb(${58 + ammoTint}, ${48 + ammoTint}, ${32 + ammoTint})`);
+          ctx.fillStyle = ammoGrad;
           ctx.fillRect(-22, -18, 44, 36);
-          ctx.strokeStyle = '#3a3020';
+
+          ctx.strokeStyle = '#2a2010';
           ctx.lineWidth = 2;
           ctx.strokeRect(-22, -18, 44, 36);
-          // Ammo markings
-          ctx.fillStyle = '#4a6a30';
+
+          const stripeGrad = ctx.createLinearGradient(-18, 0, 18, 0);
+          stripeGrad.addColorStop(0, '#3a5a20');
+          stripeGrad.addColorStop(0.5, '#4a7a30');
+          stripeGrad.addColorStop(1, '#3a5a20');
+          ctx.fillStyle = stripeGrad;
           ctx.fillRect(-18, -14, 36, 8);
           ctx.fillRect(-18, 6, 36, 8);
-          ctx.strokeStyle = '#2a4a20';
+          ctx.strokeStyle = '#2a4a10';
           ctx.lineWidth = 1;
           ctx.strokeRect(-18, -14, 36, 8);
           ctx.strokeRect(-18, 6, 36, 8);
-          break;
 
-        case 'crate_health':
-          // Health/supply crate (red markings)
-          ctx.fillStyle = '#5a4040';
+          ctx.fillStyle = '#2a4a15';
+          ctx.font = 'bold 6px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('AMMO', 0, 2);
+
+          ctx.fillStyle = 'rgba(100,120,70,0.3)';
+          ctx.fillRect(-20, -16, 6, 6);
+
+          if (decSeed > 0.5) {
+            ctx.strokeStyle = 'rgba(30,40,15,0.35)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-18 + decSeed * 12, -16);
+            ctx.lineTo(-14 + decSeed * 10, 14);
+            ctx.stroke();
+          }
+          if (decSeed > 0.7) {
+            ctx.strokeStyle = 'rgba(30,40,15,0.25)';
+            ctx.beginPath();
+            ctx.moveTo(10 - decSeed * 8, -14);
+            ctx.lineTo(12 - decSeed * 6, 12);
+            ctx.stroke();
+          }
+          break;
+        }
+
+        case 'crate_health': {
+          const healthTint = Math.floor(decSeed * 15) - 7;
+          ctx.fillStyle = 'rgba(0,0,0,0.4)';
+          ctx.fillRect(-16, -16, 40, 40);
+
+          const healthGrad = ctx.createLinearGradient(-20, -20, 20, 20);
+          healthGrad.addColorStop(0, `rgb(${106 + healthTint}, ${74 + healthTint}, ${74 + healthTint})`);
+          healthGrad.addColorStop(0.5, `rgb(${90 + healthTint}, ${64 + healthTint}, ${64 + healthTint})`);
+          healthGrad.addColorStop(1, `rgb(${58 + healthTint}, ${37 + healthTint}, ${37 + healthTint})`);
+          ctx.fillStyle = healthGrad;
           ctx.fillRect(-20, -20, 40, 40);
-          ctx.strokeStyle = '#3a2020';
+          ctx.strokeStyle = '#2a1515';
           ctx.lineWidth = 2;
           ctx.strokeRect(-20, -20, 40, 40);
-          // Red cross
-          ctx.fillStyle = '#8a3030';
+
+          const crossGrad = ctx.createLinearGradient(-14, 0, 14, 0);
+          crossGrad.addColorStop(0, '#6a2020');
+          crossGrad.addColorStop(0.5, '#aa4040');
+          crossGrad.addColorStop(1, '#6a2020');
+          ctx.fillStyle = crossGrad;
           ctx.fillRect(-4, -14, 8, 28);
           ctx.fillRect(-14, -4, 28, 8);
-          break;
 
-        case 'barrier':
-          // Construction barrier (yellow/black)
-          ctx.fillStyle = '#d4a520';
+          ctx.strokeStyle = '#4a1515';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(-4, -14, 8, 28);
+          ctx.strokeRect(-14, -4, 28, 8);
+
+          ctx.fillStyle = 'rgba(140,80,80,0.3)';
+          ctx.fillRect(-18, -18, 6, 6);
+
+          if (decSeed > 0.5) {
+            ctx.strokeStyle = 'rgba(50,25,25,0.35)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-16 + decSeed * 10, -18);
+            ctx.lineTo(-13 + decSeed * 8, 16);
+            ctx.stroke();
+          }
+          if (decSeed > 0.75) {
+            ctx.strokeStyle = 'rgba(50,25,25,0.25)';
+            ctx.beginPath();
+            ctx.moveTo(12 - decSeed * 6, -16);
+            ctx.lineTo(14 - decSeed * 5, 14);
+            ctx.stroke();
+          }
+          break;
+        }
+
+        case 'barrier': {
+          ctx.fillStyle = 'rgba(0,0,0,0.35)';
+          ctx.fillRect(-36, -4, 80, 16);
+
+          const barrierGrad = ctx.createLinearGradient(0, -8, 0, 8);
+          barrierGrad.addColorStop(0, '#e4b530');
+          barrierGrad.addColorStop(0.5, '#d4a520');
+          barrierGrad.addColorStop(1, '#a48010');
+          ctx.fillStyle = barrierGrad;
           ctx.fillRect(-40, -8, 80, 16);
-          // Black stripes
+
           ctx.fillStyle = '#1a1a1a';
           for (let i = -35; i < 35; i += 20) {
             ctx.save();
@@ -3628,7 +3911,24 @@ class Level {
             ctx.fillRect(-4, -15, 8, 30);
             ctx.restore();
           }
+
+          ctx.strokeStyle = '#2a2a2a';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-40, -8, 80, 16);
+
+          ctx.fillStyle = 'rgba(255,220,100,0.2)';
+          ctx.fillRect(-38, -6, 76, 3);
+
+          if (decSeed > 0.7) {
+            ctx.strokeStyle = 'rgba(80,60,10,0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-30 + decSeed * 40, -6);
+            ctx.lineTo(-25 + decSeed * 35, 6);
+            ctx.stroke();
+          }
           break;
+        }
       }
 
       ctx.restore();
