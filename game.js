@@ -169,6 +169,10 @@ const CONFIG = {
   ENEMY_VIEW_RANGE: 300,
   ENEMY_VIEW_ANGLE: Math.PI * 0.7,
   ENEMY_HEARING_RANGE: 200,
+  ENEMY_ALERT_RANGE: 250,
+  ENEMY_COVER_SEARCH_RANGE: 150,
+  ENEMY_FLANK_DISTANCE: 120,
+  ENEMY_SUPPRESSION_THRESHOLD: 3,
 
   // Effects
   MUZZLE_FLASH_DURATION: 3,
@@ -3109,16 +3113,17 @@ class Player {
 }
 
 // =============================================================================
-// ENEMY CLASS
+// ENEMY CLASS - Enhanced AI with alert system, cover, and flanking
 // =============================================================================
 
 class Enemy {
-  constructor(x, y) {
+  constructor(x, y, type = 'standard') {
     this.id = utils.generateId();
     this.x = x;
     this.y = y;
     this.angle = Math.random() * Math.PI * 2;
     this.radius = CONFIG.ENEMY_RADIUS;
+    this.type = type;
 
     this.hp = 80;
     this.maxHp = 80;
@@ -3127,25 +3132,48 @@ class Enemy {
     this.weapon = { ...CONFIG.WEAPONS.smg, ammo: 30, reserveAmmo: 60, type: 'smg' };
     this.fireTimer = 0;
 
-    this.state = 'patrol'; // 'patrol', 'alert', 'combat', 'cover'
+    this.state = 'patrol'; // 'patrol', 'alert', 'combat', 'cover', 'flanking'
     this.target = null;
     this.lastKnownTargetPos = null;
     this.alertTimer = 0;
     this.coverPos = null;
+    this.coverTimer = 0;
+    this.flankTarget = null;
+    this.flankTimer = 0;
 
     this.patrolPoints = [];
     this.patrolIndex = 0;
     this.waitTimer = 0;
 
     this.hearingEvents = [];
+    
+    this.suppression = 0;
+    this.lastDamageTime = 0;
+    this.aggression = 0.3 + Math.random() * 0.5;
+    this.role = Math.random() < 0.3 ? 'flanker' : 'assault';
+    this.hasAlerted = false;
+    this.reloadTimer = 0;
+    this.isReloading = false;
   }
 
   update(players, level, smokeClouds) {
     if (this.isDead) return null;
 
     if (this.fireTimer > 0) this.fireTimer--;
+    if (this.reloadTimer > 0) {
+      this.reloadTimer--;
+      if (this.reloadTimer <= 0 && this.isReloading) {
+        this.finishReload();
+      }
+    }
+    if (this.suppression > 0) this.suppression -= 0.02;
+    if (this.coverTimer > 0) this.coverTimer--;
+    if (this.flankTimer > 0) this.flankTimer--;
 
-    // State machine
+    if (this.weapon.ammo <= 0 && !this.isReloading && this.weapon.reserveAmmo > 0) {
+      this.reload();
+    }
+
     switch (this.state) {
       case 'patrol':
         this.updatePatrol(players, level, smokeClouds);
@@ -3156,10 +3184,102 @@ class Enemy {
       case 'combat':
         return this.updateCombat(players, level, smokeClouds);
       case 'cover':
-        this.updateCover(players, level, smokeClouds);
-        break;
+        return this.updateCover(players, level, smokeClouds);
+      case 'flanking':
+        return this.updateFlanking(players, level, smokeClouds);
     }
 
+    return null;
+  }
+
+  reload() {
+    if (this.reloadTimer > 0) return;
+    this.reloadTimer = this.weapon.reloadTime;
+    this.isReloading = true;
+    sound.play('reload', this.x, this.y);
+  }
+  
+  finishReload() {
+    const needed = this.weapon.magSize - this.weapon.ammo;
+    const available = Math.min(needed, this.weapon.reserveAmmo);
+    this.weapon.ammo += available;
+    this.weapon.reserveAmmo -= available;
+    this.isReloading = false;
+  }
+
+  alertNearbyEnemies(targetPos) {
+    if (this.hasAlerted || !window.__game) return;
+    this.hasAlerted = true;
+    
+    const enemies = window.__game.enemies;
+    for (const enemy of enemies) {
+      if (enemy === this || enemy.isDead) continue;
+      
+      const dist = utils.distance(this.x, this.y, enemy.x, enemy.y);
+      if (dist < CONFIG.ENEMY_ALERT_RANGE) {
+        if (enemy.state === 'patrol') {
+          enemy.state = 'alert';
+          enemy.lastKnownTargetPos = { x: targetPos.x, y: targetPos.y };
+          enemy.alertTimer = 300;
+          
+          if (window.__game && Math.random() < 0.3) {
+            const responses = ['Copy!', 'On it!', 'Moving!', 'Got it!'];
+            const response = responses[Math.floor(Math.random() * responses.length)];
+            window.__game.particles.push({
+              type: 'cheer',
+              x: enemy.x,
+              y: enemy.y - 20,
+              text: response,
+              life: 35,
+              maxLife: 35,
+              color: '#ffcc00',
+              vy: -0.5
+            });
+          }
+        }
+      }
+    }
+  }
+
+  findCoverPosition(level, threatPos) {
+    const searchRange = CONFIG.ENEMY_COVER_SEARCH_RANGE;
+    const positions = [];
+    
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      for (let dist = 40; dist < searchRange; dist += 30) {
+        const testX = this.x + Math.cos(angle) * dist;
+        const testY = this.y + Math.sin(angle) * dist;
+        
+        if (level.isSolid(testX, testY)) continue;
+        
+        const checkX = testX + Math.cos(utils.angle(testX, testY, threatPos.x, threatPos.y)) * 20;
+        const checkY = testY + Math.sin(utils.angle(testX, testY, threatPos.x, threatPos.y)) * 20;
+        
+        if (level.isSolid(checkX, checkY)) {
+          const distToThreat = utils.distance(testX, testY, threatPos.x, threatPos.y);
+          positions.push({ x: testX, y: testY, score: distToThreat > 80 ? 1 : 0.5 });
+        }
+      }
+    }
+    
+    if (positions.length === 0) return null;
+    positions.sort((a, b) => b.score - a.score);
+    return positions[0];
+  }
+
+  findFlankPosition(level, targetPos) {
+    const angleToTarget = utils.angle(this.x, this.y, targetPos.x, targetPos.y);
+    const flankAngles = [angleToTarget + Math.PI * 0.6, angleToTarget - Math.PI * 0.6];
+    
+    for (const flankAngle of flankAngles) {
+      const flankX = targetPos.x + Math.cos(flankAngle) * CONFIG.ENEMY_FLANK_DISTANCE;
+      const flankY = targetPos.y + Math.sin(flankAngle) * CONFIG.ENEMY_FLANK_DISTANCE;
+      
+      if (!level.isSolid(flankX, flankY)) {
+        return { x: flankX, y: flankY };
+      }
+    }
     return null;
   }
 
@@ -3192,16 +3312,16 @@ class Enemy {
   }
 
   updatePatrol(players, level, smokeClouds) {
-    // Check for visible players
     for (const player of players) {
       if (this.canSeeTarget(player, level, smokeClouds)) {
         this.target = player;
         this.state = 'combat';
         this.lastKnownTargetPos = { x: player.x, y: player.y };
         
-        // Add taunt when spotting player
-        if (window.__game && Math.random() < 0.5) { // 50% chance to taunt
-          const taunts = ['Contact!', 'There!', 'Enemy!', 'Spotted!', 'Target!'];
+        this.alertNearbyEnemies({ x: player.x, y: player.y });
+        
+        if (window.__game && Math.random() < 0.5) {
+          const taunts = ['Contact!', 'There!', 'Enemy!', 'Spotted!', 'Target!', 'Hostile!'];
           const taunt = taunts[Math.floor(Math.random() * taunts.length)];
           window.__game.particles.push({
             type: 'cheer',
@@ -3219,14 +3339,12 @@ class Enemy {
       }
     }
 
-    // Simple patrol behavior
     if (this.waitTimer > 0) {
       this.waitTimer--;
       return;
     }
 
     if (this.patrolPoints.length === 0) {
-      // Random wandering
       if (Math.random() < 0.02) {
         this.angle += (Math.random() - 0.5) * 0.5;
       }
@@ -3244,17 +3362,16 @@ class Enemy {
   }
 
   updateAlert(players, level, smokeClouds) {
-    // Check for visible players
     for (const player of players) {
       if (this.canSeeTarget(player, level, smokeClouds)) {
         this.target = player;
         this.state = 'combat';
         this.lastKnownTargetPos = { x: player.x, y: player.y };
+        this.alertNearbyEnemies({ x: player.x, y: player.y });
         return;
       }
     }
 
-    // Move towards last known position
     if (this.lastKnownTargetPos) {
       const dist = utils.distance(this.x, this.y, this.lastKnownTargetPos.x, this.lastKnownTargetPos.y);
       if (dist < 30) {
@@ -3275,6 +3392,7 @@ class Enemy {
     this.alertTimer--;
     if (this.alertTimer <= 0) {
       this.state = 'patrol';
+      this.hasAlerted = false;
     }
   }
 
@@ -3287,29 +3405,55 @@ class Enemy {
     }
 
     const canSee = this.canSeeTarget(this.target, level, smokeClouds);
+    const dist = utils.distance(this.x, this.y, this.target.x, this.target.y);
+
+    if (this.suppression >= CONFIG.ENEMY_SUPPRESSION_THRESHOLD && this.coverTimer <= 0) {
+      const cover = this.findCoverPosition(level, this.target);
+      if (cover) {
+        this.coverPos = cover;
+        this.state = 'cover';
+        this.coverTimer = 180;
+        return null;
+      }
+    }
+
+    if (this.role === 'flanker' && canSee && dist > 100 && this.flankTimer <= 0 && Math.random() < 0.02) {
+      const flankPos = this.findFlankPosition(level, this.target);
+      if (flankPos) {
+        this.flankTarget = flankPos;
+        this.state = 'flanking';
+        this.flankTimer = 300;
+        return null;
+      }
+    }
 
     if (canSee) {
       this.lastKnownTargetPos = { x: this.target.x, y: this.target.y };
       this.angle = utils.angle(this.x, this.y, this.target.x, this.target.y);
 
-      const dist = utils.distance(this.x, this.y, this.target.x, this.target.y);
-
-      // Fire if in range
-      if (dist < this.weapon.range && this.fireTimer <= 0 && this.weapon.ammo > 0) {
+      if (dist < this.weapon.range && this.fireTimer <= 0 && this.weapon.ammo > 0 && !this.isReloading) {
         return this.fire();
       }
 
-      // Move to optimal range
-      if (dist > 150) {
-        const nextX = this.x + Math.cos(this.angle) * CONFIG.ENEMY_SPEED;
-        const nextY = this.y + Math.sin(this.angle) * CONFIG.ENEMY_SPEED;
+      const optimalDist = 100 + (1 - this.aggression) * 80;
+      if (dist > optimalDist + 30) {
+        const moveSpeed = CONFIG.ENEMY_SPEED * (1 - this.suppression * 0.3);
+        const nextX = this.x + Math.cos(this.angle) * moveSpeed;
+        const nextY = this.y + Math.sin(this.angle) * moveSpeed;
+        if (!level.isSolid(nextX, nextY)) {
+          this.x = nextX;
+          this.y = nextY;
+        }
+      } else if (dist < optimalDist - 30 && this.hp < this.maxHp * 0.5) {
+        const retreatAngle = this.angle + Math.PI;
+        const nextX = this.x + Math.cos(retreatAngle) * CONFIG.ENEMY_SPEED * 0.7;
+        const nextY = this.y + Math.sin(retreatAngle) * CONFIG.ENEMY_SPEED * 0.7;
         if (!level.isSolid(nextX, nextY)) {
           this.x = nextX;
           this.y = nextY;
         }
       }
     } else {
-      // Lost sight, go to last known position
       this.state = 'alert';
       this.alertTimer = 180;
     }
@@ -3318,8 +3462,88 @@ class Enemy {
   }
 
   updateCover(players, level, smokeClouds) {
-    // Simplified cover behavior
-    this.state = 'combat';
+    if (!this.coverPos) {
+      this.state = 'combat';
+      return null;
+    }
+
+    const distToCover = utils.distance(this.x, this.y, this.coverPos.x, this.coverPos.y);
+    
+    if (distToCover > 15) {
+      this.angle = utils.angle(this.x, this.y, this.coverPos.x, this.coverPos.y);
+      const nextX = this.x + Math.cos(this.angle) * CONFIG.ENEMY_SPEED * 1.3;
+      const nextY = this.y + Math.sin(this.angle) * CONFIG.ENEMY_SPEED * 1.3;
+      if (!level.isSolid(nextX, nextY)) {
+        this.x = nextX;
+        this.y = nextY;
+      }
+    } else {
+      this.suppression = Math.max(0, this.suppression - 0.1);
+      
+      if (this.target && !this.target.isDead) {
+        const canSee = this.canSeeTarget(this.target, level, smokeClouds);
+        if (canSee && this.fireTimer <= 0 && this.weapon.ammo > 0 && !this.isReloading) {
+          this.angle = utils.angle(this.x, this.y, this.target.x, this.target.y);
+          return this.fire();
+        }
+      }
+      
+      if (this.suppression < 1 && this.coverTimer <= 0) {
+        this.coverPos = null;
+        this.state = 'combat';
+      }
+    }
+
+    return null;
+  }
+
+  updateFlanking(players, level, smokeClouds) {
+    if (!this.flankTarget) {
+      this.state = 'combat';
+      return null;
+    }
+
+    const distToFlank = utils.distance(this.x, this.y, this.flankTarget.x, this.flankTarget.y);
+    
+    if (distToFlank > 20) {
+      this.angle = utils.angle(this.x, this.y, this.flankTarget.x, this.flankTarget.y);
+      const nextX = this.x + Math.cos(this.angle) * CONFIG.ENEMY_SPEED * 1.2;
+      const nextY = this.y + Math.sin(this.angle) * CONFIG.ENEMY_SPEED * 1.2;
+      if (!level.isSolid(nextX, nextY)) {
+        this.x = nextX;
+        this.y = nextY;
+      } else {
+        this.flankTarget = null;
+        this.state = 'combat';
+      }
+    } else {
+      this.flankTarget = null;
+      this.state = 'combat';
+      
+      if (window.__game && Math.random() < 0.5) {
+        window.__game.particles.push({
+          type: 'cheer',
+          x: this.x,
+          y: this.y - 20,
+          text: 'Flanking!',
+          life: 40,
+          maxLife: 40,
+          color: '#ff6600',
+          vy: -0.5
+        });
+      }
+    }
+
+    if (this.target && !this.target.isDead) {
+      const canSee = this.canSeeTarget(this.target, level, smokeClouds);
+      if (canSee && this.fireTimer <= 0 && this.weapon.ammo > 0 && !this.isReloading) {
+        const aimAngle = utils.angle(this.x, this.y, this.target.x, this.target.y);
+        this.angle = aimAngle;
+        return this.fire();
+      }
+    }
+
+    return null;
   }
 
   fire() {
@@ -3328,7 +3552,8 @@ class Enemy {
     this.weapon.ammo--;
     this.fireTimer = this.weapon.fireRate + Math.random() * 10;
 
-    const spread = this.weapon.spread * 1.5; // Enemies are less accurate
+    const accuracyMod = 1 + this.suppression * 0.5;
+    const spread = this.weapon.spread * 1.5 * accuracyMod;
     const angleOffset = (Math.random() - 0.5) * spread;
     const bulletAngle = this.angle + angleOffset;
 
@@ -3345,18 +3570,18 @@ class Enemy {
 
   takeDamage(amount, fromX, fromY) {
     this.hp -= amount;
+    this.suppression = Math.min(this.suppression + 0.5, CONFIG.ENEMY_SUPPRESSION_THRESHOLD + 1);
+    this.lastDamageTime = Date.now();
     sound.play('hit');
 
     if (this.hp <= 0) {
       this.hp = 0;
       this.isDead = true;
       
-      // Award score and trigger combo event
       if (window.__game) {
-        const points = window.__game.addScore(100); // Base 100 points per kill
+        const points = window.__game.addScore(100);
         window.__game.onComboEvent();
         
-        // Add death quip as cheer particle
         const deathQuips = ['Argh!', 'Oof!', 'Down!', 'Hit!', '*thud*', 'Noo!'];
         const quip = deathQuips[Math.floor(Math.random() * deathQuips.length)];
         window.__game.particles.push({
@@ -3370,10 +3595,9 @@ class Enemy {
           vy: -1
         });
         
-        // Occasionally drop power-ups (use plain objects that match ItemDrop interface)
-        if (Math.random() < 0.3) { // 30% drop chance
+        if (Math.random() < 0.3) {
           const dropTypes = ['ammo', 'medkit', 'adrenaline', 'charm'];
-          const weights = [0.4, 0.3, 0.2, 0.1]; // ammo most common, charm rarest
+          const weights = [0.4, 0.3, 0.2, 0.1];
           
           let rand = Math.random();
           let dropType = 'ammo';
@@ -3386,18 +3610,16 @@ class Enemy {
             }
           }
           
-          // Create the drop with all required properties
-          let amount = 30;
-          if (dropType === 'medkit') amount = 40;
-          else if (dropType === 'adrenaline') amount = 1;
-          else if (dropType === 'charm') amount = 1;
+          let dropAmount = 30;
+          if (dropType === 'medkit') dropAmount = 40;
+          else if (dropType === 'adrenaline') dropAmount = 1;
+          else if (dropType === 'charm') dropAmount = 1;
           
-          // Create drop object matching ItemDrop structure
           const drop = {
             type: dropType,
             x: this.x + (Math.random() - 0.5) * 20,
             y: this.y + (Math.random() - 0.5) * 20,
-            amount: amount,
+            amount: dropAmount,
             collected: false,
             lifetime: 0,
             bobOffset: Math.random() * Math.PI * 2,
@@ -3449,11 +3671,11 @@ class Enemy {
       return true;
     }
 
-    // React to being shot
     if (this.state === 'patrol') {
       this.state = 'alert';
       this.lastKnownTargetPos = { x: fromX, y: fromY };
       this.alertTimer = 300;
+      this.alertNearbyEnemies({ x: fromX, y: fromY });
     }
 
     return false;
@@ -3475,30 +3697,28 @@ class Enemy {
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
 
-    // Body
-    ctx.fillStyle = this.state === 'combat' ? '#aa3333' :
-                    this.state === 'alert' ? '#aa6633' : '#666666';
+    let bodyColor = '#666666';
+    if (this.state === 'combat') bodyColor = '#aa3333';
+    else if (this.state === 'alert') bodyColor = '#aa6633';
+    else if (this.state === 'cover') bodyColor = '#336699';
+    else if (this.state === 'flanking') bodyColor = '#993399';
+    
+    ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Weapon
+    if (this.role === 'flanker') {
+      ctx.strokeStyle = '#ffcc00';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
     ctx.fillStyle = '#333';
     ctx.fillRect(5, -2, 15, 4);
 
-    // View cone (debug)
-    /*
-    ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.arc(0, 0, CONFIG.ENEMY_VIEW_RANGE, -CONFIG.ENEMY_VIEW_ANGLE/2, CONFIG.ENEMY_VIEW_ANGLE/2);
-    ctx.closePath();
-    ctx.fill();
-    */
-
     ctx.restore();
 
-    // Health bar
     const barWidth = 20;
     const barHeight = 3;
     const x = this.x - barWidth/2;
@@ -3507,6 +3727,307 @@ class Enemy {
     ctx.fillStyle = '#333';
     ctx.fillRect(x, y, barWidth, barHeight);
     ctx.fillStyle = '#f44336';
+    ctx.fillRect(x, y, barWidth * (this.hp / this.maxHp), barHeight);
+    
+    if (this.suppression > 0) {
+      ctx.fillStyle = `rgba(255, 255, 0, ${this.suppression * 0.3})`;
+      ctx.fillRect(x, y - 4, barWidth * (this.suppression / CONFIG.ENEMY_SUPPRESSION_THRESHOLD), 2);
+    }
+  }
+}
+
+// =============================================================================
+// SPECIALIZED ENEMY TYPES
+// =============================================================================
+
+class ShieldBearer extends Enemy {
+  constructor(x, y) {
+    super(x, y, 'shield');
+    this.hp = 120;
+    this.maxHp = 120;
+    this.weapon = { ...CONFIG.WEAPONS.pistol, ammo: 15, reserveAmmo: 45, type: 'pistol' };
+    this.shieldAngle = 0;
+    this.shieldArc = Math.PI * 0.8;
+    this.role = 'assault';
+    this.aggression = 0.7;
+  }
+
+  takeDamage(amount, fromX, fromY) {
+    const angleFromShot = utils.angle(this.x, this.y, fromX, fromY);
+    let angleDiff = angleFromShot - this.angle;
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+    
+    if (Math.abs(angleDiff) < this.shieldArc / 2) {
+      amount *= 0.2;
+      sound.play('ricochet', this.x, this.y);
+      
+      if (window.__game && Math.random() < 0.3) {
+        window.__game.particles.push({
+          type: 'cheer',
+          x: this.x,
+          y: this.y - 25,
+          text: 'Blocked!',
+          life: 30,
+          maxLife: 30,
+          color: '#4488ff',
+          vy: -0.5
+        });
+      }
+    }
+    
+    return super.takeDamage(amount, fromX, fromY);
+  }
+
+  draw(ctx) {
+    if (this.isDead) {
+      super.draw(ctx);
+      return;
+    }
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+
+    ctx.fillStyle = this.state === 'combat' ? '#3366aa' : '#4477bb';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#5588cc';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, this.radius + 6, -this.shieldArc/2, this.shieldArc/2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#7799dd';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#333';
+    ctx.fillRect(5, -2, 12, 4);
+
+    ctx.restore();
+
+    const barWidth = 20;
+    const barHeight = 3;
+    const x = this.x - barWidth/2;
+    const y = this.y - this.radius - 12;
+
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x, y, barWidth, barHeight);
+    ctx.fillStyle = '#4488ff';
+    ctx.fillRect(x, y, barWidth * (this.hp / this.maxHp), barHeight);
+  }
+}
+
+class Demolitionist extends Enemy {
+  constructor(x, y) {
+    super(x, y, 'demo');
+    this.hp = 70;
+    this.maxHp = 70;
+    this.weapon = { ...CONFIG.WEAPONS.smg, ammo: 30, reserveAmmo: 60, type: 'smg' };
+    this.grenadeCount = 2;
+    this.grenadeTimer = 0;
+    this.grenadeCooldown = 300;
+    this.role = 'assault';
+    this.aggression = 0.4;
+  }
+
+  update(players, level, smokeClouds) {
+    if (this.isDead) return null;
+    
+    if (this.grenadeTimer > 0) this.grenadeTimer--;
+    
+    if (this.state === 'combat' && this.target && !this.target.isDead && 
+        this.grenadeCount > 0 && this.grenadeTimer <= 0 && this.fireTimer <= 0) {
+      const dist = utils.distance(this.x, this.y, this.target.x, this.target.y);
+      if (dist > 80 && dist < 250 && Math.random() < 0.015) {
+        return this.throwGrenade();
+      }
+    }
+    
+    return super.update(players, level, smokeClouds);
+  }
+
+  throwGrenade() {
+    if (this.grenadeCount <= 0 || !this.target) return null;
+    
+    this.grenadeCount--;
+    this.grenadeTimer = this.grenadeCooldown;
+    
+    const type = Math.random() < 0.6 ? 'frag' : 'flash';
+    
+    if (window.__game) {
+      window.__game.particles.push({
+        type: 'cheer',
+        x: this.x,
+        y: this.y - 20,
+        text: type === 'frag' ? 'Frag out!' : 'Flash!',
+        life: 40,
+        maxLife: 40,
+        color: type === 'frag' ? '#ff4400' : '#ffff00',
+        vy: -0.5
+      });
+    }
+    
+    return {
+      grenade: {
+        type: type,
+        x: this.x,
+        y: this.y,
+        targetX: this.target.x + (Math.random() - 0.5) * 40,
+        targetY: this.target.y + (Math.random() - 0.5) * 40,
+        throwerId: this.id
+      }
+    };
+  }
+
+  draw(ctx) {
+    if (this.isDead) {
+      super.draw(ctx);
+      return;
+    }
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+
+    ctx.fillStyle = this.state === 'combat' ? '#cc4400' : '#aa5522';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#333';
+    ctx.fillRect(5, -2, 15, 4);
+
+    ctx.restore();
+
+    for (let i = 0; i < this.grenadeCount; i++) {
+      ctx.fillStyle = '#446622';
+      ctx.beginPath();
+      ctx.arc(this.x - 8 + i * 8, this.y + this.radius + 6, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const barWidth = 20;
+    const barHeight = 3;
+    const x = this.x - barWidth/2;
+    const y = this.y - this.radius - 8;
+
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x, y, barWidth, barHeight);
+    ctx.fillStyle = '#ff6600';
+    ctx.fillRect(x, y, barWidth * (this.hp / this.maxHp), barHeight);
+  }
+}
+
+class Spotter extends Enemy {
+  constructor(x, y) {
+    super(x, y, 'spotter');
+    this.hp = 60;
+    this.maxHp = 60;
+    this.weapon = { ...CONFIG.WEAPONS.pistol, ammo: 15, reserveAmmo: 30, type: 'pistol' };
+    this.spotTimer = 0;
+    this.spotDuration = 180;
+    this.markedTarget = null;
+    this.role = 'flanker';
+    this.aggression = 0.2;
+  }
+
+  update(players, level, smokeClouds) {
+    if (this.isDead) return null;
+    
+    if (this.spotTimer > 0) this.spotTimer--;
+    
+    const result = super.update(players, level, smokeClouds);
+    
+    if (this.state === 'combat' && this.target && !this.target.isDead && 
+        this.spotTimer <= 0 && Math.random() < 0.01) {
+      this.markTarget();
+    }
+    
+    return result;
+  }
+
+  markTarget() {
+    if (!this.target || !window.__game) return;
+    
+    this.markedTarget = this.target;
+    this.spotTimer = this.spotDuration;
+    
+    window.__game.particles.push({
+      type: 'cheer',
+      x: this.x,
+      y: this.y - 20,
+      text: 'Marked!',
+      life: 50,
+      maxLife: 50,
+      color: '#ff00ff',
+      vy: -0.5
+    });
+    
+    for (const enemy of window.__game.enemies) {
+      if (enemy === this || enemy.isDead) continue;
+      if (enemy.state === 'patrol' || enemy.state === 'alert') {
+        enemy.target = this.target;
+        enemy.state = 'combat';
+        enemy.lastKnownTargetPos = { x: this.target.x, y: this.target.y };
+      }
+    }
+  }
+
+  draw(ctx) {
+    if (this.isDead) {
+      super.draw(ctx);
+      return;
+    }
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+
+    ctx.fillStyle = this.state === 'combat' ? '#9900cc' : '#7722aa';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#cc44ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius + 3, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = '#333';
+    ctx.fillRect(5, -2, 12, 4);
+
+    ctx.restore();
+
+    if (this.spotTimer > 0 && this.markedTarget && !this.markedTarget.isDead) {
+      ctx.strokeStyle = `rgba(255, 0, 255, ${0.3 + Math.sin(Date.now() * 0.01) * 0.2})`;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y);
+      ctx.lineTo(this.markedTarget.x, this.markedTarget.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      ctx.strokeStyle = '#ff00ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(this.markedTarget.x, this.markedTarget.y, 20, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    const barWidth = 20;
+    const barHeight = 3;
+    const x = this.x - barWidth/2;
+    const y = this.y - this.radius - 8;
+
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x, y, barWidth, barHeight);
+    ctx.fillStyle = '#cc44ff';
     ctx.fillRect(x, y, barWidth * (this.hp / this.maxHp), barHeight);
   }
 }
@@ -4110,10 +4631,23 @@ class Game {
       this.teammates.push(teammate);
     }
 
-    // Spawn enemies
+    // Spawn enemies with variety
     this.enemies = [];
-    for (const sp of this.level.spawnPoints.enemy) {
-      this.enemies.push(new Enemy(sp.x, sp.y));
+    const enemySpawns = this.level.spawnPoints.enemy;
+    for (let i = 0; i < enemySpawns.length; i++) {
+      const sp = enemySpawns[i];
+      const roll = Math.random();
+      let enemy;
+      if (roll < 0.15) {
+        enemy = new ShieldBearer(sp.x, sp.y);
+      } else if (roll < 0.30) {
+        enemy = new Demolitionist(sp.x, sp.y);
+      } else if (roll < 0.40) {
+        enemy = new Spotter(sp.x, sp.y);
+      } else {
+        enemy = new Enemy(sp.x, sp.y);
+      }
+      this.enemies.push(enemy);
     }
 
     // Spawn boss if level has a boss spawn point
@@ -4198,10 +4732,23 @@ class Game {
       this.teammates.push(aiTeammate);
     }
 
-    // Spawn enemies
+    // Spawn enemies with variety
     this.enemies = [];
-    for (const sp of this.level.spawnPoints.enemy) {
-      this.enemies.push(new Enemy(sp.x, sp.y));
+    const enemySpawns = this.level.spawnPoints.enemy;
+    for (let i = 0; i < enemySpawns.length; i++) {
+      const sp = enemySpawns[i];
+      const roll = Math.random();
+      let enemy;
+      if (roll < 0.15) {
+        enemy = new ShieldBearer(sp.x, sp.y);
+      } else if (roll < 0.30) {
+        enemy = new Demolitionist(sp.x, sp.y);
+      } else if (roll < 0.40) {
+        enemy = new Spotter(sp.x, sp.y);
+      } else {
+        enemy = new Enemy(sp.x, sp.y);
+      }
+      this.enemies.push(enemy);
     }
 
     // Spawn boss if level has a boss spawn point
