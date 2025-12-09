@@ -1350,3 +1350,184 @@ button {
   color: #ffa94d;
   border-color: rgba(255, 169, 77, 0.3);
 }
+
+/* =============================================================================
+   LEADERBOARD
+   ============================================================================= */
+
+.leaderboard-container {
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 15px;
+}
+
+.leaderboard-loading {
+  color: #888;
+  text-align: center;
+  padding: 20px;
+}
+
+.leaderboard-empty {
+  color: #666;
+  text-align: center;
+  padding: 30px;
+  font-style: italic;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #333;
+}
+
+.leaderboard-table th {
+  color: #c41e3a;
+  font-size: 0.75rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  background: rgba(196, 30, 58, 0.1);
+}
+
+.leaderboard-table td {
+  color: #ccc;
+  font-size: 0.9rem;
+}
+
+.leaderboard-table tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.leaderboard-table .rank {
+  color: #ffc107;
+  font-weight: 700;
+  width: 40px;
+}
+
+.leaderboard-table .rank-1 {
+  color: #ffd700;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.leaderboard-table .rank-2 {
+  color: #c0c0c0;
+}
+
+.leaderboard-table .rank-3 {
+  color: #cd7f32;
+}
+
+.leaderboard-table .player-name-cell {
+  font-weight: 600;
+  color: #fff;
+}
+
+.leaderboard-table .score-cell {
+  color: #4caf50;
+  font-weight: 700;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.leaderboard-table .class-cell {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.leaderboard-table .map-cell {
+  color: #888;
+  font-size: 0.8rem;
+}
+
+#leaderboard-menu h3 {
+  color: #c41e3a;
+  font-size: 1.2rem;
+  letter-spacing: 4px;
+  margin-bottom: 20px;
+}
+
+.score-submit-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1002;
+}
+
+.score-submit-content {
+  background: rgba(20, 20, 30, 0.98);
+  padding: 40px 50px;
+  border-radius: 4px;
+  border: 1px solid #333;
+  text-align: center;
+  max-width: 400px;
+}
+
+.score-submit-content h2 {
+  color: #4caf50;
+  font-size: 1.5rem;
+  letter-spacing: 4px;
+  margin-bottom: 10px;
+}
+
+.score-submit-content .final-score {
+  font-size: 3rem;
+  color: #ffc107;
+  font-weight: 700;
+  margin-bottom: 20px;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.score-submit-content .score-input-section {
+  margin-bottom: 20px;
+}
+
+.score-submit-content .score-input-section label {
+  display: block;
+  color: #888;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+
+.score-submit-content .score-input-section input {
+  width: 100%;
+  padding: 12px 15px;
+  font-size: 1rem;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid #444;
+  border-radius: 3px;
+  color: #fff;
+  text-align: center;
+  font-family: inherit;
+}
+
+.score-submit-content .score-input-section input:focus {
+  outline: none;
+  border-color: #c41e3a;
+}
+
+.score-submit-content .submit-buttons {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+}
+
+.score-submit-content .submit-status {
+  margin-top: 15px;
+  font-size: 0.85rem;
+  min-height: 20px;
+}

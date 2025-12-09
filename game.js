@@ -6233,6 +6233,7 @@ class Game {
 
     // Score & Combo system
     this.score = 0;
+    this.scoreSubmitShown = false;
     this.multiplier = 1;
     this.comboTimer = 0;
     this.comboWindow = 300; // frames (~5 seconds at 60fps)
@@ -6330,6 +6331,144 @@ class Game {
 
     // Save/Load menu close button
     document.getElementById('save-load-close-btn')?.addEventListener('click', () => this.hideSaveLoadMenu());
+
+    // Leaderboard button
+    document.getElementById('leaderboard-btn')?.addEventListener('click', () => this.showLeaderboard());
+    document.getElementById('leaderboard-back')?.addEventListener('click', () => this.showMainMenu());
+  }
+
+  async showLeaderboard() {
+    document.getElementById('main-menu-buttons').style.display = 'none';
+    document.getElementById('singleplayer-menu').style.display = 'none';
+    document.getElementById('multiplayer-menu').style.display = 'none';
+    document.getElementById('lobby-screen').style.display = 'none';
+    document.getElementById('leaderboard-menu').style.display = 'block';
+
+    const container = document.getElementById('leaderboard-container');
+    container.innerHTML = '<div class="leaderboard-loading">Loading...</div>';
+
+    try {
+      const response = await fetch('/api/leaderboard');
+      const scores = await response.json();
+
+      if (scores.length === 0) {
+        container.innerHTML = '<div class="leaderboard-empty">No scores yet. Be the first!</div>';
+        return;
+      }
+
+      let html = `<table class="leaderboard-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Player</th>
+            <th>Score</th>
+            <th>Kills</th>
+            <th>Class</th>
+            <th>Map</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+      scores.forEach((entry, index) => {
+        const rankClass = index < 3 ? `rank rank-${index + 1}` : 'rank';
+        html += `<tr>
+          <td class="${rankClass}">${index + 1}</td>
+          <td class="player-name-cell">${this.escapeHtml(entry.player_name)}</td>
+          <td class="score-cell">${entry.score.toLocaleString()}</td>
+          <td>${entry.kills}</td>
+          <td class="class-cell">${entry.soldier_class || '-'}</td>
+          <td class="map-cell">${entry.map_name || '-'}</td>
+        </tr>`;
+      });
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    } catch (err) {
+      container.innerHTML = '<div class="leaderboard-empty">Failed to load leaderboard</div>';
+    }
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  async submitScore(playerName) {
+    try {
+      const response = await fetch('/api/leaderboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerName: playerName,
+          score: this.score,
+          kills: this.difficultyDirector.playerKills,
+          mapName: this.selectedMap,
+          soldierClass: this.selectedClass
+        })
+      });
+      return await response.json();
+    } catch (err) {
+      console.error('Failed to submit score:', err);
+      return { error: 'Failed to submit score' };
+    }
+  }
+
+  showScoreSubmitDialog() {
+    if (this.scoreSubmitShown) return;
+    this.scoreSubmitShown = true;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'score-submit-overlay';
+    overlay.id = 'score-submit-overlay';
+    overlay.innerHTML = `
+      <div class="score-submit-content">
+        <h2>MISSION COMPLETE</h2>
+        <div class="final-score">${this.score.toLocaleString()}</div>
+        <div class="score-input-section">
+          <label>Enter your name for the leaderboard:</label>
+          <input type="text" id="score-player-name" maxlength="20" placeholder="Your name..." value="Player">
+        </div>
+        <div class="submit-buttons">
+          <button id="submit-score-btn" class="btn-primary">SUBMIT SCORE</button>
+          <button id="skip-score-btn" class="btn-secondary">SKIP</button>
+        </div>
+        <div id="submit-status" class="submit-status"></div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    document.getElementById('submit-score-btn').addEventListener('click', async () => {
+      const nameInput = document.getElementById('score-player-name');
+      const statusEl = document.getElementById('submit-status');
+      const name = nameInput.value.trim() || 'Player';
+      
+      statusEl.textContent = 'Submitting...';
+      statusEl.style.color = '#888';
+      
+      const result = await this.submitScore(name);
+      
+      if (result.success) {
+        statusEl.textContent = 'Score submitted!';
+        statusEl.style.color = '#4caf50';
+        setTimeout(() => this.closeScoreSubmitDialog(), 1500);
+      } else {
+        statusEl.textContent = result.error || 'Failed to submit';
+        statusEl.style.color = '#f44336';
+      }
+    });
+
+    document.getElementById('skip-score-btn').addEventListener('click', () => {
+      this.closeScoreSubmitDialog();
+    });
+  }
+
+  closeScoreSubmitDialog() {
+    const overlay = document.getElementById('score-submit-overlay');
+    if (overlay) {
+      overlay.remove();
+    }
   }
 
   bindMultiplayerEvents() {
@@ -6400,6 +6539,7 @@ class Game {
     document.getElementById('singleplayer-menu').style.display = 'none';
     document.getElementById('multiplayer-menu').style.display = 'none';
     document.getElementById('lobby-screen').style.display = 'none';
+    document.getElementById('leaderboard-menu').style.display = 'none';
   }
 
   showSingleplayerMenu() {
@@ -8157,9 +8297,13 @@ class Game {
   checkMissionStatus() {
     // All enemies dead = win
     if (this.enemies.every(e => e.isDead)) {
-      this.missionComplete = true;
-      if (this.isMultiplayer) {
-        multiplayer.stopSync();
+      if (!this.missionComplete) {
+        this.missionComplete = true;
+        if (this.isMultiplayer) {
+          multiplayer.stopSync();
+        }
+        // Show score submit dialog after a short delay
+        setTimeout(() => this.showScoreSubmitDialog(), 2000);
       }
     }
 

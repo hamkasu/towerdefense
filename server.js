@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
+const { Pool } = require('pg');
 
 const app = express();
 const server = http.createServer(app);
@@ -10,11 +11,67 @@ const wss = new WebSocket.Server({ server });
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
 
-// Serve static files
+app.use(express.json());
 app.use(express.static(__dirname));
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+async function initDatabase() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS leaderboard (
+        id SERIAL PRIMARY KEY,
+        player_name VARCHAR(50) NOT NULL,
+        score INTEGER NOT NULL,
+        kills INTEGER DEFAULT 0,
+        map_name VARCHAR(50),
+        soldier_class VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Leaderboard table ready');
+  } catch (err) {
+    console.error('Database init error:', err);
+  }
+}
+
+initDatabase();
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT player_name, score, kills, map_name, soldier_class, created_at FROM leaderboard ORDER BY score DESC LIMIT 20'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Leaderboard fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
+});
+
+app.post('/api/leaderboard', async (req, res) => {
+  const { playerName, score, kills, mapName, soldierClass } = req.body;
+  
+  if (!playerName || typeof score !== 'number') {
+    return res.status(400).json({ error: 'Invalid data' });
+  }
+  
+  try {
+    const result = await pool.query(
+      'INSERT INTO leaderboard (player_name, score, kills, map_name, soldier_class) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [playerName.slice(0, 50), score, kills || 0, mapName || 'unknown', soldierClass || 'assault']
+    );
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (err) {
+    console.error('Leaderboard submit error:', err);
+    res.status(500).json({ error: 'Failed to submit score' });
+  }
 });
 
 // =============================================================================
