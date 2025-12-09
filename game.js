@@ -5890,6 +5890,7 @@ class Game {
     this.breachCharges = [];
     this.explosionEffects = [];
     this.itemDrops = [];
+    this.lightSources = [];
 
     // Map selection
     this.selectedMap = 'compound';
@@ -6585,6 +6586,9 @@ class Game {
         this.bullets.push(...result.bullets);
         this.shellCasings.push(result.casing);
         this.notifyEnemiesOfSound(this.player.x, this.player.y, 1);
+        const muzzleX = this.player.x + Math.cos(this.player.angle) * 25;
+        const muzzleY = this.player.y + Math.sin(this.player.angle) * 25;
+        this.spawnMuzzleLight(muzzleX, muzzleY);
       }
     }
 
@@ -6616,6 +6620,9 @@ class Game {
           this.bullets.push(result.bullet);
           this.shellCasings.push(result.casing);
           this.notifyEnemiesOfSound(enemy.x, enemy.y, 0.8);
+          const muzzleX = enemy.x + Math.cos(enemy.angle) * 20;
+          const muzzleY = enemy.y + Math.sin(enemy.angle) * 20;
+          this.spawnMuzzleLight(muzzleX, muzzleY);
         }
         // Handle boss grenades
         if (result.grenade) {
@@ -6641,6 +6648,7 @@ class Game {
         }
       } else if (hit?.type === 'wall') {
         this.spawnSparks(hit.x, hit.y);
+        this.spawnSparkLight(hit.x, hit.y);
       }
     }
     this.bullets = this.bullets.filter(b => !b.dead);
@@ -6696,6 +6704,9 @@ class Game {
 
     // Update item drops
     for (const drop of this.itemDrops) drop.update();
+
+    // Update dynamic lights
+    this.updateLights();
 
     // Update effects
     if (this.flashOverlay > 0) this.flashOverlay -= 3;
@@ -7331,6 +7342,7 @@ class Game {
 
         // Spawn explosion area effect visualization
         this.explosionEffects.push(new ExplosionEffect(x, y, CONFIG.FRAG_RADIUS));
+        this.spawnExplosionLight(x, y, CONFIG.FRAG_RADIUS);
 
         // Damage entities
         for (const entity of [...this.teammates, ...this.enemies]) {
@@ -7463,6 +7475,104 @@ class Game {
         'debris'
       ));
     }
+  }
+
+  spawnLight(x, y, radius, color, intensity, duration, type = 'point') {
+    this.lightSources.push({
+      x, y,
+      radius,
+      color,
+      intensity,
+      maxIntensity: intensity,
+      life: duration,
+      maxLife: duration,
+      type,
+      flicker: type === 'muzzle' || type === 'explosion'
+    });
+  }
+
+  spawnMuzzleLight(x, y) {
+    this.spawnLight(x, y, 80, '#ffaa00', 0.6, 4, 'muzzle');
+  }
+
+  spawnExplosionLight(x, y, radius) {
+    this.spawnLight(x, y, radius * 2.5, '#ff6600', 0.8, 45, 'explosion');
+  }
+
+  spawnSparkLight(x, y) {
+    this.spawnLight(x, y, 40, '#ffcc00', 0.3, 10, 'spark');
+  }
+
+  updateLights() {
+    for (const light of this.lightSources) {
+      light.life--;
+      const progress = light.life / light.maxLife;
+      
+      if (light.type === 'muzzle') {
+        light.intensity = light.maxIntensity * progress;
+      } else if (light.type === 'explosion') {
+        const elapsed = 1 - progress;
+        if (elapsed < 0.1) {
+          light.intensity = light.maxIntensity * (elapsed / 0.1);
+        } else {
+          light.intensity = light.maxIntensity * (1 - (elapsed - 0.1) / 0.9);
+        }
+      } else {
+        light.intensity = light.maxIntensity * progress;
+      }
+      
+      if (light.flicker && light.life > 2) {
+        light.intensity *= 0.8 + Math.random() * 0.4;
+      }
+      light.intensity = Math.max(0, Math.min(1, light.intensity));
+    }
+    this.lightSources = this.lightSources.filter(l => l.life > 0);
+  }
+
+  drawDynamicLighting(ctx) {
+    if (this.lightSources.length === 0) return;
+    
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    
+    for (const light of this.lightSources) {
+      if (light.intensity <= 0) continue;
+      
+      const gradient = ctx.createRadialGradient(
+        light.x, light.y, 0,
+        light.x, light.y, light.radius
+      );
+      
+      const r = parseInt(light.color.substr(1, 2), 16);
+      const g = parseInt(light.color.substr(3, 2), 16);
+      const b = parseInt(light.color.substr(5, 2), 16);
+      
+      const coreAlpha = light.intensity * 0.4;
+      const midAlpha = light.intensity * 0.2;
+      const edgeAlpha = light.intensity * 0.05;
+      
+      gradient.addColorStop(0, `rgba(${Math.min(255, r + 50)}, ${Math.min(255, g + 50)}, ${Math.min(255, b + 30)}, ${coreAlpha})`);
+      gradient.addColorStop(0.3, `rgba(${r}, ${g}, ${b}, ${midAlpha})`);
+      gradient.addColorStop(0.7, `rgba(${Math.floor(r * 0.7)}, ${Math.floor(g * 0.5)}, ${Math.floor(b * 0.3)}, ${edgeAlpha})`);
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(light.x, light.y, light.radius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      if (light.type === 'explosion' || light.type === 'muzzle') {
+        ctx.shadowColor = light.color;
+        ctx.shadowBlur = light.radius * 0.3 * light.intensity;
+        ctx.beginPath();
+        ctx.arc(light.x, light.y, light.radius * 0.2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${light.intensity * 0.3})`;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+    
+    ctx.restore();
   }
 
   spawnEnemyDrops(enemy) {
@@ -7769,6 +7879,9 @@ class Game {
 
     // Item drops
     for (const drop of this.itemDrops) drop.draw(ctx);
+
+    // Dynamic lighting layer
+    this.drawDynamicLighting(ctx);
 
     // Grenade aiming indicator
     this.drawGrenadeAimIndicator(ctx);
@@ -8361,6 +8474,9 @@ class Game {
         this.bullets.push(...result.bullets);
         this.shellCasings.push(result.casing);
         this.notifyEnemiesOfSound(this.player.x, this.player.y, 1);
+        const muzzleX = this.player.x + Math.cos(this.player.angle) * 25;
+        const muzzleY = this.player.y + Math.sin(this.player.angle) * 25;
+        this.spawnMuzzleLight(muzzleX, muzzleY);
       }
     }
   }
