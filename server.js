@@ -7,7 +7,8 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
+const HOST = '0.0.0.0';
 
 // Serve static files
 app.use(express.static(__dirname));
@@ -259,7 +260,7 @@ function handleMessage(playerId, ws, message) {
 // START SERVER
 // =============================================================================
 
-server.listen(PORT, () => {
-  console.log(`Close Quarter Combat server running at http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Close Quarter Combat server running at http://${HOST}:${PORT}`);
   console.log(`WebSocket server ready for multiplayer connections`);
 });
