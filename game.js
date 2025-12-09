@@ -5287,7 +5287,10 @@ class Game {
 
     for (const drop of this.itemDrops) {
       if (drop.collected) continue;
-      if (!drop.isNear(entity.x, entity.y, 40)) continue;
+      const dx = drop.x - entity.x;
+      const dy = drop.y - entity.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 40) continue;
 
       // Found a nearby item
       switch (drop.type) {
