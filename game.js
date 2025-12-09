@@ -6191,6 +6191,8 @@ class Game {
     this.explosionEffects = [];
     this.itemDrops = [];
     this.lightSources = [];
+    this.dustParticles = [];
+    this.atmosphereTime = 0;
 
     // Map selection
     this.selectedMap = 'compound';
@@ -6628,6 +6630,10 @@ class Game {
     this.missionFailed = false;
     this.isRunning = true;
 
+    // Initialize environmental effects
+    this.initDustParticles();
+    this.atmosphereTime = 0;
+
     // Reset difficulty director for new mission
     this.difficultyDirector.reset();
 
@@ -6731,6 +6737,10 @@ class Game {
     this.missionComplete = false;
     this.missionFailed = false;
     this.isRunning = true;
+
+    // Initialize environmental effects
+    this.initDustParticles();
+    this.atmosphereTime = 0;
 
     // Reset difficulty director for new mission
     this.difficultyDirector.reset();
@@ -7007,6 +7017,9 @@ class Game {
 
     // Update dynamic lights
     this.updateLights();
+
+    // Update environmental effects
+    this.updateDustParticles();
 
     // Update effects
     if (this.flashOverlay > 0) this.flashOverlay -= 3;
@@ -7875,6 +7888,114 @@ class Game {
     ctx.restore();
   }
 
+  initDustParticles() {
+    this.dustParticles = [];
+    const particleCount = 80;
+    
+    for (let i = 0; i < particleCount; i++) {
+      this.dustParticles.push({
+        x: Math.random() * CONFIG.MAP_WIDTH,
+        y: Math.random() * CONFIG.MAP_HEIGHT,
+        z: Math.random(),
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.2,
+        size: 1 + Math.random() * 2,
+        alpha: 0.1 + Math.random() * 0.2,
+        twinkle: Math.random() * Math.PI * 2
+      });
+    }
+  }
+
+  updateDustParticles() {
+    for (const dust of this.dustParticles) {
+      dust.x += dust.vx;
+      dust.y += dust.vy;
+      dust.twinkle += 0.02;
+      
+      if (dust.x < 0) dust.x = CONFIG.MAP_WIDTH;
+      if (dust.x > CONFIG.MAP_WIDTH) dust.x = 0;
+      if (dust.y < 0) dust.y = CONFIG.MAP_HEIGHT;
+      if (dust.y > CONFIG.MAP_HEIGHT) dust.y = 0;
+    }
+    this.atmosphereTime += 0.01;
+  }
+
+  drawDustParticles(ctx) {
+    ctx.save();
+    for (const dust of this.dustParticles) {
+      const parallax = 0.3 + dust.z * 0.7;
+      const screenX = dust.x - this.cameraX * parallax;
+      const screenY = dust.y - this.cameraY * parallax;
+      
+      if (screenX < this.cameraX - 50 || screenX > this.cameraX + CONFIG.CANVAS_WIDTH + 50 ||
+          screenY < this.cameraY - 50 || screenY > this.cameraY + CONFIG.CANVAS_HEIGHT + 50) {
+        continue;
+      }
+      
+      const twinkleAlpha = dust.alpha * (0.6 + 0.4 * Math.sin(dust.twinkle));
+      const depthSize = dust.size * (0.5 + dust.z * 0.5);
+      
+      const gradient = ctx.createRadialGradient(
+        screenX, screenY, 0,
+        screenX, screenY, depthSize * 2
+      );
+      gradient.addColorStop(0, `rgba(200, 190, 170, ${twinkleAlpha})`);
+      gradient.addColorStop(0.5, `rgba(180, 170, 150, ${twinkleAlpha * 0.5})`);
+      gradient.addColorStop(1, 'rgba(150, 140, 120, 0)');
+      
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, depthSize * 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawVignette(ctx) {
+    const w = CONFIG.CANVAS_WIDTH;
+    const h = CONFIG.CANVAS_HEIGHT;
+    const cx = w / 2;
+    const cy = h / 2;
+    const maxRadius = Math.sqrt(cx * cx + cy * cy);
+    
+    const gradient = ctx.createRadialGradient(cx, cy, maxRadius * 0.4, cx, cy, maxRadius);
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(0.85, 'rgba(0, 0, 0, 0.15)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.4)');
+    
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  drawAtmosphere(ctx) {
+    const w = CONFIG.CANVAS_WIDTH;
+    const h = CONFIG.CANVAS_HEIGHT;
+    
+    const hazeAlpha = 0.02 + 0.01 * Math.sin(this.atmosphereTime);
+    ctx.fillStyle = `rgba(80, 70, 60, ${hazeAlpha})`;
+    ctx.fillRect(0, 0, w, h);
+    
+    const noiseOffset = this.atmosphereTime * 50;
+    ctx.save();
+    ctx.globalAlpha = 0.015;
+    for (let i = 0; i < 3; i++) {
+      const x = (noiseOffset + i * 400) % (w + 200) - 100;
+      const y = h * 0.3 + Math.sin(noiseOffset * 0.02 + i) * 50;
+      
+      const wisps = ctx.createRadialGradient(x, y, 0, x, y, 150);
+      wisps.addColorStop(0, 'rgba(150, 140, 120, 0.3)');
+      wisps.addColorStop(0.5, 'rgba(120, 110, 100, 0.1)');
+      wisps.addColorStop(1, 'rgba(100, 90, 80, 0)');
+      
+      ctx.fillStyle = wisps;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 200, 80, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   spawnEnemyDrops(enemy) {
     const isBoss = enemy.isBoss === true;
 
@@ -8183,6 +8304,9 @@ class Game {
     // Dynamic lighting layer
     this.drawDynamicLighting(ctx);
 
+    // Ambient dust particles (world space)
+    this.drawDustParticles(ctx);
+
     // Grenade aiming indicator
     this.drawGrenadeAimIndicator(ctx);
 
@@ -8203,6 +8327,10 @@ class Game {
       ctx.fillStyle = `rgba(255, 255, 255, ${intensity * 0.8})`;
       ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
     }
+
+    // Atmospheric effects (screen space)
+    this.drawAtmosphere(ctx);
+    this.drawVignette(ctx);
 
     // Draw minimap (always on top, not affected by camera)
     this.drawMinimap(ctx);
