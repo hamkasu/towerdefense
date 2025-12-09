@@ -193,6 +193,190 @@ const CONFIG = {
     KILL_STREAK_THRESHOLD: 3,
     DAMAGE_STREAK_THRESHOLD: 30,
   },
+
+  // Soldier Classes
+  SOLDIER_CLASSES: {
+    assault: {
+      name: 'Assault',
+      description: 'Frontline fighter with balanced combat abilities',
+      icon: 'A',
+      color: '#ff6b6b',
+      stats: {
+        health: 100,
+        armor: 15,
+        speed: 1.0,
+        accuracy: 1.0,
+        staminaRegen: 1.0
+      },
+      defaultWeapons: ['rifle', 'pistol'],
+      defaultGear: ['plate_carrier', 'combat_helmet', 'frag_grenades']
+    },
+    breacher: {
+      name: 'Breacher',
+      description: 'Close quarters specialist with heavy armor',
+      icon: 'B',
+      color: '#ffa94d',
+      stats: {
+        health: 120,
+        armor: 25,
+        speed: 0.85,
+        accuracy: 0.9,
+        staminaRegen: 0.9
+      },
+      defaultWeapons: ['shotgun', 'smg'],
+      defaultGear: ['heavy_armor', 'ballistic_helmet', 'breach_charges']
+    },
+    recon: {
+      name: 'Recon',
+      description: 'Fast scout with enhanced awareness',
+      icon: 'R',
+      color: '#69db7c',
+      stats: {
+        health: 80,
+        armor: 5,
+        speed: 1.25,
+        accuracy: 1.15,
+        staminaRegen: 1.3
+      },
+      defaultWeapons: ['smg', 'pistol'],
+      defaultGear: ['light_vest', 'patrol_cap', 'smoke_grenades']
+    },
+    support: {
+      name: 'Support',
+      description: 'Team support with extra supplies',
+      icon: 'S',
+      color: '#74c0fc',
+      stats: {
+        health: 110,
+        armor: 20,
+        speed: 0.9,
+        accuracy: 0.95,
+        staminaRegen: 1.1
+      },
+      defaultWeapons: ['rifle', 'pistol'],
+      defaultGear: ['plate_carrier', 'combat_helmet', 'medkit']
+    }
+  },
+
+  // Gear Items
+  GEAR: {
+    // Body Armor
+    light_vest: {
+      name: 'Light Tactical Vest',
+      type: 'armor',
+      slot: 'body',
+      armorBonus: 5,
+      speedPenalty: 0,
+      description: 'Minimal protection, maximum mobility'
+    },
+    plate_carrier: {
+      name: 'Plate Carrier',
+      type: 'armor',
+      slot: 'body',
+      armorBonus: 15,
+      speedPenalty: 0.05,
+      description: 'Standard issue ballistic protection'
+    },
+    heavy_armor: {
+      name: 'Heavy Assault Armor',
+      type: 'armor',
+      slot: 'body',
+      armorBonus: 30,
+      speedPenalty: 0.15,
+      description: 'Maximum protection for breaching operations'
+    },
+
+    // Helmets
+    patrol_cap: {
+      name: 'Patrol Cap',
+      type: 'helmet',
+      slot: 'head',
+      armorBonus: 0,
+      awarenessBonus: 0.1,
+      description: 'No protection, better peripheral vision'
+    },
+    combat_helmet: {
+      name: 'Combat Helmet',
+      type: 'helmet',
+      slot: 'head',
+      armorBonus: 10,
+      awarenessBonus: 0,
+      description: 'Standard ballistic helmet with NVG mount'
+    },
+    ballistic_helmet: {
+      name: 'Ballistic Face Shield',
+      type: 'helmet',
+      slot: 'head',
+      armorBonus: 20,
+      awarenessBonus: -0.1,
+      description: 'Full face protection, reduced visibility'
+    },
+
+    // Tactical Equipment
+    frag_grenades: {
+      name: 'Frag Grenades x3',
+      type: 'equipment',
+      slot: 'tactical',
+      grenades: { frag: 3 },
+      description: 'Lethal fragmentation grenades'
+    },
+    smoke_grenades: {
+      name: 'Smoke Grenades x4',
+      type: 'equipment',
+      slot: 'tactical',
+      grenades: { smoke: 4 },
+      description: 'Concealment smoke canisters'
+    },
+    breach_charges: {
+      name: 'Breach Charges x2',
+      type: 'equipment',
+      slot: 'tactical',
+      breachCharges: 2,
+      description: 'Explosive door breaching charges'
+    },
+    medkit: {
+      name: 'Medical Kit',
+      type: 'equipment',
+      slot: 'tactical',
+      healAmount: 50,
+      healCharges: 2,
+      description: 'Field medical supplies for team healing'
+    },
+
+    // Attachments/Accessories
+    nvg: {
+      name: 'Night Vision Goggles',
+      type: 'accessory',
+      slot: 'accessory',
+      nightVision: true,
+      description: 'Enhanced low-light visibility'
+    },
+    suppressor: {
+      name: 'Suppressor',
+      type: 'accessory',
+      slot: 'weapon_mod',
+      noiseReduction: 0.7,
+      damageReduction: 0.1,
+      description: 'Reduces weapon noise and muzzle flash'
+    },
+    extended_mag: {
+      name: 'Extended Magazine',
+      type: 'accessory',
+      slot: 'weapon_mod',
+      magBonus: 10,
+      reloadPenalty: 0.1,
+      description: 'Increased ammo capacity'
+    }
+  },
+
+  // Soldier Stats Display Labels
+  STAT_LABELS: {
+    health: 'Health',
+    armor: 'Armor',
+    speed: 'Speed',
+    accuracy: 'Accuracy',
+    staminaRegen: 'Stamina'
+  }
 };
 
 // =============================================================================
@@ -2886,7 +3070,7 @@ class Level {
 // =============================================================================
 
 class Player {
-  constructor(x, y, isLocal = false) {
+  constructor(x, y, isLocal = false, soldierClass = 'assault') {
     this.id = utils.generateId();
     this.x = x;
     this.y = y;
@@ -2900,14 +3084,30 @@ class Player {
     this.team = 'blue';
     this.name = isLocal ? 'You' : 'Teammate';
 
+    // Soldier Class & Stats
+    this.soldierClass = soldierClass;
+    this.classData = CONFIG.SOLDIER_CLASSES[soldierClass] || CONFIG.SOLDIER_CLASSES.assault;
+    this.baseStats = { ...this.classData.stats };
+    
+    // Gear Loadout
+    this.gear = {
+      body: null,
+      head: null,
+      tactical: null,
+      accessory: null,
+      weapon_mod: null
+    };
+    this.applyDefaultGear();
+
     // Interpolation targets (for remote players)
     this.targetX = undefined;
     this.targetY = undefined;
     this.targetAngle = undefined;
 
-    // Health
-    this.hp = CONFIG.PLAYER_MAX_HP;
-    this.maxHp = CONFIG.PLAYER_MAX_HP;
+    // Health (based on class stats + gear bonuses)
+    this.maxHp = this.calculateMaxHealth();
+    this.hp = this.maxHp;
+    this.armor = this.calculateArmor();
     this.isDead = false;
     this.bleeding = 0;
 
@@ -2925,24 +3125,28 @@ class Player {
     this.moveLeft = false;
     this.moveRight = false;
     this.isSprinting = false;
+    this.stamina = 100;
+    this.maxStamina = 100;
     // Click-to-move target
     this.moveTargetX = null;
     this.moveTargetY = null;
 
-    // Weapons
-    this.weapons = [
-      this.createWeapon('rifle'),
-      this.createWeapon('pistol')
-    ];
+    // Weapons (based on class defaults)
+    this.weapons = this.classData.defaultWeapons.map(w => this.createWeapon(w));
     this.currentWeapon = 0;
     this.fireTimer = 0;
     this.isReloading = false;
     this.reloadTimer = 0;
     this.isFiring = false;
 
-    // Grenades (frag and smoke only - no flashbangs)
-    this.grenades = { frag: 3, smoke: 2 };
-    this.selectedGrenade = 'frag';
+    // Grenades (from gear)
+    this.grenades = this.calculateGrenades();
+    this.selectedGrenade = Object.keys(this.grenades)[0] || 'frag';
+
+    // Special equipment from gear
+    this.breachCharges = this.getGearValue('breachCharges') || 0;
+    this.healCharges = this.getGearValue('healCharges') || 0;
+    this.healAmount = this.getGearValue('healAmount') || 0;
 
     // Effects
     this.flashedTimer = 0;
@@ -2957,6 +3161,144 @@ class Player {
     this.orderPosition = null; // Position for stay/guard orders
     this.guardRadius = 150; // Radius for guard order
     this.coverTarget = null; // Target position for cover order
+
+    // Kill/Mission stats
+    this.kills = 0;
+    this.assists = 0;
+    this.damageDealt = 0;
+    this.shotsFired = 0;
+    this.shotsHit = 0;
+  }
+
+  applyDefaultGear() {
+    for (const gearId of this.classData.defaultGear) {
+      const gearData = CONFIG.GEAR[gearId];
+      if (gearData) {
+        this.gear[gearData.slot] = gearId;
+      }
+    }
+  }
+
+  calculateMaxHealth() {
+    return this.baseStats.health;
+  }
+
+  calculateArmor() {
+    let armor = this.baseStats.armor || 0;
+    for (const slot in this.gear) {
+      const gearId = this.gear[slot];
+      if (gearId) {
+        const gearData = CONFIG.GEAR[gearId];
+        if (gearData && gearData.armorBonus) {
+          armor += gearData.armorBonus;
+        }
+      }
+    }
+    return armor;
+  }
+
+  calculateGrenades() {
+    const grenades = { frag: 0, smoke: 0 };
+    for (const slot in this.gear) {
+      const gearId = this.gear[slot];
+      if (gearId) {
+        const gearData = CONFIG.GEAR[gearId];
+        if (gearData && gearData.grenades) {
+          for (const type in gearData.grenades) {
+            grenades[type] = (grenades[type] || 0) + gearData.grenades[type];
+          }
+        }
+      }
+    }
+    return grenades;
+  }
+
+  getGearValue(property) {
+    for (const slot in this.gear) {
+      const gearId = this.gear[slot];
+      if (gearId) {
+        const gearData = CONFIG.GEAR[gearId];
+        if (gearData && gearData[property]) {
+          return gearData[property];
+        }
+      }
+    }
+    return null;
+  }
+
+  getSpeedMultiplier() {
+    let speedMult = this.baseStats.speed;
+    for (const slot in this.gear) {
+      const gearId = this.gear[slot];
+      if (gearId) {
+        const gearData = CONFIG.GEAR[gearId];
+        if (gearData && gearData.speedPenalty) {
+          speedMult -= gearData.speedPenalty;
+        }
+      }
+    }
+    return Math.max(0.5, speedMult);
+  }
+
+  getAccuracyMultiplier() {
+    let accMult = this.baseStats.accuracy;
+    for (const slot in this.gear) {
+      const gearId = this.gear[slot];
+      if (gearId) {
+        const gearData = CONFIG.GEAR[gearId];
+        if (gearData && gearData.awarenessBonus) {
+          accMult += gearData.awarenessBonus * 0.5;
+        }
+      }
+    }
+    return accMult;
+  }
+
+  getStats() {
+    return {
+      health: this.maxHp,
+      armor: this.armor,
+      speed: Math.round(this.getSpeedMultiplier() * 100),
+      accuracy: Math.round(this.getAccuracyMultiplier() * 100),
+      staminaRegen: Math.round(this.baseStats.staminaRegen * 100)
+    };
+  }
+
+  getGearList() {
+    const list = [];
+    for (const slot in this.gear) {
+      const gearId = this.gear[slot];
+      if (gearId) {
+        const gearData = CONFIG.GEAR[gearId];
+        if (gearData) {
+          list.push({ slot, id: gearId, ...gearData });
+        }
+      }
+    }
+    return list;
+  }
+
+  takeDamage(amount) {
+    // Armor reduces damage
+    const armorReduction = Math.min(amount * 0.5, this.armor * 0.5);
+    const actualDamage = Math.max(1, amount - armorReduction);
+    this.hp -= actualDamage;
+    
+    if (this.hp <= 0) {
+      this.hp = 0;
+      this.isDead = true;
+    }
+    return actualDamage;
+  }
+
+  useHeal(target) {
+    if (this.healCharges > 0 && target && !target.isDead) {
+      const healAmount = Math.min(this.healAmount, target.maxHp - target.hp);
+      target.hp += healAmount;
+      this.healCharges--;
+      return healAmount;
+    }
+    return 0;
   }
 
   createWeapon(type) {
@@ -2977,6 +3319,8 @@ class Player {
     let base = this.stance === 'stand' ? CONFIG.PLAYER_SPEED_STAND :
                this.stance === 'crouch' ? CONFIG.PLAYER_SPEED_CROUCH :
                CONFIG.PLAYER_SPEED_PRONE;
+    // Apply class and gear speed multiplier
+    base *= this.getSpeedMultiplier();
     if (this.isSprinting && this.stance === 'stand') base *= 1.5;
     if (this.isADS) base *= 0.5;
     // Apply adrenaline boost
@@ -2988,6 +3332,8 @@ class Player {
     let acc = this.stance === 'stand' ? CONFIG.ACCURACY_STAND :
               this.stance === 'crouch' ? CONFIG.ACCURACY_CROUCH :
               CONFIG.ACCURACY_PRONE;
+    // Apply class and gear accuracy multiplier (lower is better)
+    acc *= (2 - this.getAccuracyMultiplier());
     if (this.isADS) acc *= CONFIG.ACCURACY_ADS;
     if (Math.abs(this.vx) > 0.1 || Math.abs(this.vy) > 0.1) acc *= CONFIG.ACCURACY_MOVING;
     return acc;
@@ -4459,6 +4805,9 @@ class Game {
     // Map selection
     this.selectedMap = 'compound';
 
+    // Soldier class selection
+    this.selectedClass = 'assault';
+
     // Team formation
     this.currentFormation = 'closeCombat';
     this.formationKeys = Object.keys(CONFIG.FORMATIONS);
@@ -4539,6 +4888,18 @@ class Game {
     document.getElementById('sound-toggle')?.addEventListener('click', () => {
       const enabled = sound.toggle();
       document.getElementById('sound-toggle').textContent = `Sound: ${enabled ? 'ON' : 'OFF'}`;
+    });
+
+    // Class selection buttons
+    document.querySelectorAll('.class-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const target = e.target.closest('.class-btn');
+        if (!target) return;
+        document.querySelectorAll('.class-btn').forEach(b => b.classList.remove('selected'));
+        target.classList.add('selected');
+        this.selectedClass = target.dataset.class;
+        this.updateClassPreview();
+      });
     });
 
     // Map selection buttons (single player)
@@ -4768,6 +5129,27 @@ class Game {
     }
   }
 
+  updateClassPreview() {
+    const classData = CONFIG.SOLDIER_CLASSES[this.selectedClass];
+    if (!classData) return;
+
+    const descEl = document.getElementById('class-description');
+    if (descEl) descEl.textContent = classData.description;
+
+    const stats = classData.stats;
+    document.getElementById('preview-health').style.width = `${stats.health}%`;
+    document.getElementById('preview-armor').style.width = `${Math.min(100, stats.armor * 2)}%`;
+    document.getElementById('preview-speed').style.width = `${stats.speed * 100}%`;
+    document.getElementById('preview-accuracy').style.width = `${stats.accuracy * 100}%`;
+
+    const gearList = document.getElementById('gear-list');
+    if (gearList) {
+      const weapons = classData.defaultWeapons.map(w => CONFIG.WEAPONS[w]?.name || w).join(' + ');
+      const gearItems = classData.defaultGear.map(g => CONFIG.GEAR[g]?.name || g);
+      gearList.innerHTML = `<li>${weapons}</li>` + gearItems.map(g => `<li>${g}</li>`).join('');
+    }
+  }
+
   showMenu() {
     document.getElementById('menu-screen').style.display = 'flex';
     document.getElementById('game-screen').style.display = 'none';
@@ -4803,15 +5185,17 @@ class Game {
     this.cameraX = 0;
     this.cameraY = 0;
 
-    // Spawn player
+    // Spawn player with selected class
     const spawn = this.level.spawnPoints.team[0];
-    this.player = new Player(spawn.x, spawn.y, true);
+    this.player = new Player(spawn.x, spawn.y, true, this.selectedClass);
 
-    // Spawn AI teammates
+    // Spawn AI teammates with varied classes
+    const aiClasses = ['support', 'breacher', 'recon'];
     this.teammates = [this.player];
     for (let i = 1; i < this.level.spawnPoints.team.length; i++) {
       const sp = this.level.spawnPoints.team[i];
-      const teammate = new Player(sp.x, sp.y, false);
+      const aiClass = aiClasses[(i - 1) % aiClasses.length];
+      const teammate = new Player(sp.x, sp.y, false, aiClass);
       teammate.name = ['Alpha', 'Bravo', 'Charlie'][i-1] || `Team ${i}`;
       teammate.isAI = true;
       this.teammates.push(teammate);
@@ -6120,7 +6504,16 @@ class Game {
     const w = this.player.weapon;
     document.getElementById('weapon-name').textContent = w.name;
     document.getElementById('ammo-count').textContent = `${w.ammo}/${w.reserveAmmo}`;
-    document.getElementById('health-fill').style.width = `${this.player.hp}%`;
+    
+    const healthPercent = (this.player.hp / this.player.maxHp) * 100;
+    document.getElementById('health-fill').style.width = `${healthPercent}%`;
+    
+    const armorFill = document.getElementById('armor-fill');
+    if (armorFill) {
+      const maxArmor = 60;
+      armorFill.style.width = `${Math.min(100, (this.player.armor / maxArmor) * 100)}%`;
+    }
+    
     document.getElementById('stance-text').textContent =
       this.player.stance.charAt(0).toUpperCase() + this.player.stance.slice(1) +
       (this.player.isADS ? ' (ADS)' : '');
@@ -6131,6 +6524,21 @@ class Game {
 
     document.getElementById('enemies-count').textContent =
       `Enemies: ${this.enemies.filter(e => !e.isDead).length}`;
+
+    const classIcon = document.getElementById('soldier-class-icon');
+    const className = document.getElementById('soldier-class-name');
+    if (classIcon && className && this.player.classData) {
+      classIcon.textContent = this.player.classData.icon;
+      classIcon.style.background = this.player.classData.color;
+      className.textContent = this.player.classData.name;
+    }
+
+    const statHp = document.getElementById('stat-hp');
+    const statArmor = document.getElementById('stat-armor');
+    const statSpeed = document.getElementById('stat-speed');
+    if (statHp) statHp.textContent = Math.round(this.player.hp);
+    if (statArmor) statArmor.textContent = this.player.armor;
+    if (statSpeed) statSpeed.textContent = `${Math.round(this.player.getSpeedMultiplier() * 100)}%`;
 
     // Update formation display
     const formationEl = document.getElementById('formation-text');

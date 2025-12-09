@@ -25,6 +25,45 @@
 
         <!-- Single Player Options (hidden by default) -->
         <div id="singleplayer-menu" class="submenu" style="display: none;">
+          <!-- Soldier Class Selection -->
+          <div class="class-selection">
+            <h3>SELECT CLASS</h3>
+            <div class="class-buttons">
+              <button class="class-btn selected" data-class="assault">
+                <span class="class-icon" style="background: #ff6b6b;">A</span>
+                <span class="class-name">Assault</span>
+              </button>
+              <button class="class-btn" data-class="breacher">
+                <span class="class-icon" style="background: #ffa94d;">B</span>
+                <span class="class-name">Breacher</span>
+              </button>
+              <button class="class-btn" data-class="recon">
+                <span class="class-icon" style="background: #69db7c;">R</span>
+                <span class="class-name">Recon</span>
+              </button>
+              <button class="class-btn" data-class="support">
+                <span class="class-icon" style="background: #74c0fc;">S</span>
+                <span class="class-name">Support</span>
+              </button>
+            </div>
+            <p id="class-description" class="class-desc">Frontline fighter with balanced combat abilities</p>
+            <div class="class-stats-preview">
+              <div class="stat-bar"><span class="stat-label">Health</span><div class="stat-fill-container"><div id="preview-health" class="stat-fill" style="width: 100%;"></div></div></div>
+              <div class="stat-bar"><span class="stat-label">Armor</span><div class="stat-fill-container"><div id="preview-armor" class="stat-fill" style="width: 40%;"></div></div></div>
+              <div class="stat-bar"><span class="stat-label">Speed</span><div class="stat-fill-container"><div id="preview-speed" class="stat-fill" style="width: 100%;"></div></div></div>
+              <div class="stat-bar"><span class="stat-label">Accuracy</span><div class="stat-fill-container"><div id="preview-accuracy" class="stat-fill" style="width: 100%;"></div></div></div>
+            </div>
+            <div id="class-gear-preview" class="gear-preview">
+              <h4>Default Gear:</h4>
+              <ul id="gear-list">
+                <li>M4 Rifle + M9 Pistol</li>
+                <li>Plate Carrier</li>
+                <li>Combat Helmet</li>
+                <li>Frag Grenades x3</li>
+              </ul>
+            </div>
+          </div>
+
           <div class="map-selection">
             <h3>SELECT MAP</h3>
             <div class="map-buttons">
@@ -126,10 +165,26 @@
     <!-- HUD -->
     <div id="hud" style="display: none;">
       <div class="hud-left">
+        <!-- Soldier Class & Stats Panel -->
+        <div class="soldier-panel">
+          <div class="soldier-class-badge">
+            <span id="soldier-class-icon" class="class-badge-icon" style="background: #ff6b6b;">A</span>
+            <span id="soldier-class-name">Assault</span>
+          </div>
+          <div class="soldier-stats-mini">
+            <div class="mini-stat"><span class="mini-stat-icon">HP</span><span id="stat-hp">100</span></div>
+            <div class="mini-stat"><span class="mini-stat-icon">ARM</span><span id="stat-armor">40</span></div>
+            <div class="mini-stat"><span class="mini-stat-icon">SPD</span><span id="stat-speed">100%</span></div>
+          </div>
+        </div>
+
         <div class="health-container">
           <div class="health-label">HEALTH</div>
           <div class="health-bar">
             <div id="health-fill" class="health-fill"></div>
+          </div>
+          <div class="armor-bar">
+            <div id="armor-fill" class="armor-fill"></div>
           </div>
         </div>
         <div class="stance-container">

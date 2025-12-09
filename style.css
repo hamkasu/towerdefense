@@ -1070,3 +1070,231 @@ button {
 .save-slots-container::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
+/* =============================================================================
+   SOLDIER CLASS SELECTION
+   ============================================================================= */
+
+.class-selection {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #333;
+  padding: 15px 20px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.class-selection h3 {
+  color: #c41e3a;
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+}
+
+.class-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.class-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #444;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 90px;
+}
+
+.class-btn:hover {
+  background: rgba(196, 30, 58, 0.2);
+  border-color: #c41e3a;
+}
+
+.class-btn.selected {
+  background: rgba(196, 30, 58, 0.3);
+  border-color: #c41e3a;
+  box-shadow: 0 0 15px rgba(196, 30, 58, 0.4);
+}
+
+.class-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 1.2rem;
+  color: #fff;
+  margin-bottom: 6px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.class-name {
+  font-size: 0.75rem;
+  color: #ccc;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.class-desc {
+  color: #888;
+  font-size: 0.8rem;
+  font-style: italic;
+  margin: 0 0 12px 0;
+}
+
+.class-stats-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.stat-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: #888;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  width: 70px;
+  text-align: right;
+}
+
+.stat-fill-container {
+  flex: 1;
+  height: 6px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.stat-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #c41e3a 0%, #ff4757 100%);
+  transition: width 0.3s ease;
+}
+
+.gear-preview {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #333;
+  border-radius: 3px;
+  padding: 10px 15px;
+  text-align: left;
+}
+
+.gear-preview h4 {
+  font-size: 0.7rem;
+  color: #666;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.gear-preview ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.gear-preview li {
+  font-size: 0.8rem;
+  color: #aaa;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.gear-preview li:last-child {
+  border-bottom: none;
+}
+
+/* =============================================================================
+   SOLDIER STATS HUD
+   ============================================================================= */
+
+.soldier-panel {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.soldier-class-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.class-badge-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 0.85rem;
+  color: #fff;
+}
+
+#soldier-class-name {
+  font-size: 0.8rem;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+
+.soldier-stats-mini {
+  display: flex;
+  gap: 12px;
+}
+
+.mini-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.mini-stat-icon {
+  font-size: 0.6rem;
+  color: #666;
+  letter-spacing: 1px;
+}
+
+.mini-stat span:last-child {
+  font-size: 0.85rem;
+  color: #fff;
+  font-weight: 600;
+}
+
+.armor-bar {
+  width: 120px;
+  height: 4px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.armor-fill {
+  height: 100%;
+  width: 50%;
+  background: linear-gradient(90deg, #4a7cc9 0%, #74c0fc 100%);
+  transition: width 0.2s ease;
+}
