@@ -356,6 +356,29 @@ button {
   font-weight: 700;
 }
 
+/* Difficulty Display */
+.difficulty-container {
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 5px;
+  padding: 5px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.difficulty-label {
+  color: #666;
+  margin-right: 5px;
+}
+
+#difficulty-display {
+  font-weight: 700;
+  transition: color 0.3s ease;
+}
+
 /* Weapon Info */
 .weapon-info {
   text-align: left;

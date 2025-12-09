@@ -178,7 +178,176 @@ const CONFIG = {
   MUZZLE_FLASH_DURATION: 3,
   BLOOD_PARTICLES: 6,
   SHELL_CASING_LIFETIME: 120,
+
+  // Dynamic Difficulty Director
+  DIFFICULTY: {
+    BASE_ENEMY_ACCURACY: 0.4,
+    MIN_ACCURACY_MULT: 0.5,
+    MAX_ACCURACY_MULT: 1.5,
+    BASE_SPAWN_CHANCE_ELITE: 0.40,
+    MIN_SPAWN_ELITE_MULT: 0.5,
+    MAX_SPAWN_ELITE_MULT: 1.5,
+    PERFORMANCE_WINDOW: 600,
+    ADJUSTMENT_RATE: 0.02,
+    TARGET_HP_PERCENT: 0.6,
+    KILL_STREAK_THRESHOLD: 3,
+    DAMAGE_STREAK_THRESHOLD: 30,
+  },
 };
+
+// =============================================================================
+// DYNAMIC DIFFICULTY DIRECTOR
+// =============================================================================
+
+class DifficultyDirector {
+  constructor() {
+    this.difficultyLevel = 1.0;
+    this.performanceHistory = [];
+    this.windowSize = CONFIG.DIFFICULTY.PERFORMANCE_WINDOW;
+    
+    this.playerKills = 0;
+    this.playerDamageTaken = 0;
+    this.playerHealthAtStart = 100;
+    this.missionStartTime = 0;
+    this.lastKillTime = 0;
+    this.killStreak = 0;
+    this.damageStreak = 0;
+    
+    this.accuracyMult = 1.0;
+    this.eliteSpawnMult = 1.0;
+    this.reactionTimeMult = 1.0;
+  }
+
+  reset() {
+    this.difficultyLevel = 1.0;
+    this.performanceHistory = [];
+    this.playerKills = 0;
+    this.playerDamageTaken = 0;
+    this.playerHealthAtStart = 100;
+    this.missionStartTime = Date.now();
+    this.lastKillTime = 0;
+    this.killStreak = 0;
+    this.damageStreak = 0;
+    this.accuracyMult = 1.0;
+    this.eliteSpawnMult = 1.0;
+    this.reactionTimeMult = 1.0;
+  }
+
+  recordKill() {
+    this.playerKills++;
+    const now = Date.now();
+    
+    if (now - this.lastKillTime < 3000) {
+      this.killStreak++;
+    } else {
+      this.killStreak = 1;
+    }
+    this.lastKillTime = now;
+    
+    this.performanceHistory.push({ type: 'kill', time: now, streak: this.killStreak });
+    this.trimHistory();
+  }
+
+  recordDamageTaken(amount) {
+    this.playerDamageTaken += amount;
+    this.damageStreak += amount;
+    
+    this.performanceHistory.push({ type: 'damage', time: Date.now(), amount: amount });
+    this.trimHistory();
+  }
+
+  recordTeammateDeath() {
+    this.performanceHistory.push({ type: 'teammateDeath', time: Date.now() });
+    this.trimHistory();
+  }
+
+  trimHistory() {
+    const cutoffTime = Date.now() - (this.windowSize * 16.67);
+    this.performanceHistory = this.performanceHistory.filter(e => e.time > cutoffTime);
+  }
+
+  update(player, teammates) {
+    if (!player) return;
+
+    const cfg = CONFIG.DIFFICULTY;
+    
+    const recentKills = this.performanceHistory.filter(e => e.type === 'kill').length;
+    const recentDamage = this.performanceHistory.filter(e => e.type === 'damage').reduce((sum, e) => sum + e.amount, 0);
+    const recentDeaths = this.performanceHistory.filter(e => e.type === 'teammateDeath').length;
+    
+    const healthPercent = player.hp / player.maxHp;
+    const aliveTeammates = teammates.filter(t => !t.isDead).length;
+    const totalTeammates = Math.max(1, teammates.length);
+    const teamHealthPercent = aliveTeammates / totalTeammates;
+
+    let performanceScore = 0.5;
+    
+    if (recentKills > cfg.KILL_STREAK_THRESHOLD) {
+      performanceScore += 0.1 * Math.min(recentKills - cfg.KILL_STREAK_THRESHOLD, 5);
+    }
+    
+    if (healthPercent > cfg.TARGET_HP_PERCENT) {
+      performanceScore += 0.1;
+    } else if (healthPercent < 0.3) {
+      performanceScore -= 0.2;
+    }
+    
+    if (recentDamage > cfg.DAMAGE_STREAK_THRESHOLD) {
+      performanceScore -= 0.1 * Math.min(Math.floor(recentDamage / cfg.DAMAGE_STREAK_THRESHOLD), 3);
+    }
+    
+    if (recentDeaths > 0) {
+      performanceScore -= 0.15 * recentDeaths;
+    }
+    
+    if (teamHealthPercent < 0.5) {
+      performanceScore -= 0.1;
+    }
+
+    performanceScore = Math.max(0, Math.min(1, performanceScore));
+
+    const targetDifficulty = 0.6 + performanceScore * 0.8;
+    this.difficultyLevel += (targetDifficulty - this.difficultyLevel) * cfg.ADJUSTMENT_RATE;
+    this.difficultyLevel = Math.max(0.5, Math.min(1.5, this.difficultyLevel));
+
+    this.accuracyMult = cfg.MIN_ACCURACY_MULT + 
+      (cfg.MAX_ACCURACY_MULT - cfg.MIN_ACCURACY_MULT) * (this.difficultyLevel - 0.5);
+    
+    this.eliteSpawnMult = cfg.MIN_SPAWN_ELITE_MULT + 
+      (cfg.MAX_SPAWN_ELITE_MULT - cfg.MIN_SPAWN_ELITE_MULT) * (this.difficultyLevel - 0.5);
+    
+    this.reactionTimeMult = 1.5 - (this.difficultyLevel - 0.5) * 0.5;
+    this.reactionTimeMult = Math.max(0.8, Math.min(1.2, this.reactionTimeMult));
+
+    if (this.damageStreak > 0) {
+      this.damageStreak = Math.max(0, this.damageStreak - 0.5);
+    }
+  }
+
+  getEnemyAccuracy(baseAccuracy) {
+    return baseAccuracy * this.accuracyMult;
+  }
+
+  getEliteSpawnChance(baseChance) {
+    return Math.min(0.8, baseChance * this.eliteSpawnMult);
+  }
+
+  getReactionDelay(baseDelay) {
+    return baseDelay * this.reactionTimeMult;
+  }
+
+  shouldSpawnReinforcements() {
+    return this.difficultyLevel > 1.2 && Math.random() < 0.02;
+  }
+
+  getDifficultyLabel() {
+    if (this.difficultyLevel < 0.7) return 'Easy';
+    if (this.difficultyLevel < 0.9) return 'Normal';
+    if (this.difficultyLevel < 1.1) return 'Hard';
+    if (this.difficultyLevel < 1.3) return 'Intense';
+    return 'Nightmare';
+  }
+}
 
 // =============================================================================
 // MULTIPLAYER MANAGER
@@ -2985,7 +3154,13 @@ class Player {
 
     // Armor reduction for torso (simplified)
     const reduction = this.stance === 'prone' ? 0.7 : 0.85;
-    this.hp -= amount * reduction;
+    const actualDamage = amount * reduction;
+    this.hp -= actualDamage;
+
+    // Record damage to difficulty director
+    if (window.__game && window.__game.difficultyDirector) {
+      window.__game.difficultyDirector.recordDamageTaken(actualDamage);
+    }
 
     // Track damage time for AI suppression system
     if (this.isAI && this.aiState) {
@@ -3004,6 +3179,11 @@ class Player {
     if (this.hp <= 0) {
       this.hp = 0;
       this.isDead = true;
+      
+      // Record teammate death for difficulty adjustment
+      if (this.isAI && window.__game && window.__game.difficultyDirector) {
+        window.__game.difficultyDirector.recordTeammateDeath();
+      }
     }
 
     return true;
@@ -3553,7 +3733,9 @@ class Enemy {
     this.fireTimer = this.weapon.fireRate + Math.random() * 10;
 
     const accuracyMod = 1 + this.suppression * 0.5;
-    const spread = this.weapon.spread * 1.5 * accuracyMod;
+    const difficultyAccuracy = window.__game ? 
+      window.__game.difficultyDirector.getEnemyAccuracy(1.0) : 1.0;
+    const spread = this.weapon.spread * 1.5 * accuracyMod / difficultyAccuracy;
     const angleOffset = (Math.random() - 0.5) * spread;
     const bulletAngle = this.angle + angleOffset;
 
@@ -3581,6 +3763,7 @@ class Enemy {
       if (window.__game) {
         const points = window.__game.addScore(100);
         window.__game.onComboEvent();
+        window.__game.difficultyDirector.recordKill();
         
         const deathQuips = ['Argh!', 'Oof!', 'Down!', 'Hit!', '*thud*', 'Noo!'];
         const quip = deathQuips[Math.floor(Math.random() * deathQuips.length)];
@@ -4324,6 +4507,9 @@ class Game {
     this.adrenalineTimer = 0;
     this.adrenalineDuration = 360; // ~6 seconds
 
+    // Dynamic Difficulty Director
+    this.difficultyDirector = new DifficultyDirector();
+
     // Global reference for Enemy class
     window.__game = this;
 
@@ -4668,6 +4854,9 @@ class Game {
     this.missionFailed = false;
     this.isRunning = true;
 
+    // Reset difficulty director for new mission
+    this.difficultyDirector.reset();
+
     this.gameLoop();
   }
 
@@ -4768,6 +4957,9 @@ class Game {
     this.missionComplete = false;
     this.missionFailed = false;
     this.isRunning = true;
+
+    // Reset difficulty director for new mission
+    this.difficultyDirector.reset();
 
     // Start syncing player state
     multiplayer.startSync(this);
@@ -4900,6 +5092,9 @@ class Game {
 
     // Update camera
     this.updateCamera();
+
+    // Update dynamic difficulty director
+    this.difficultyDirector.update(this.player, this.teammates);
 
     // Update fog of war (reveal areas around player and teammates)
     this.level.updateFogOfWar(this.player.x, this.player.y, this.teammates);
@@ -5104,6 +5299,11 @@ class Game {
 
     // Handle item pickups for player
     this.handleItemPickups();
+
+    // Dynamic difficulty - spawn reinforcements when player is dominating
+    if (this.difficultyDirector.shouldSpawnReinforcements() && this.enemies.filter(e => !e.isDead).length < 8) {
+      this.spawnDifficultyReinforcements();
+    }
 
     // Check mission status
     this.checkMissionStatus();
@@ -5967,6 +6167,23 @@ class Game {
       } else {
         funFillEl.style.opacity = '1';
       }
+    }
+
+    // Update difficulty display
+    const difficultyEl = document.getElementById('difficulty-display');
+    if (difficultyEl) {
+      const label = this.difficultyDirector.getDifficultyLabel();
+      difficultyEl.textContent = label;
+      
+      // Color code difficulty
+      const colors = {
+        'Easy': '#4ade80',
+        'Normal': '#fbbf24',
+        'Hard': '#f97316',
+        'Intense': '#ef4444',
+        'Nightmare': '#dc2626'
+      };
+      difficultyEl.style.color = colors[label] || '#ffffff';
     }
   }
 
