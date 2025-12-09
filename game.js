@@ -4632,55 +4632,169 @@ class Enemy {
 
   draw(ctx) {
     if (this.isDead) {
+      // Dead body shadow
       ctx.save();
-      ctx.translate(this.x, this.y);
-      ctx.fillStyle = '#4a4a4a';
+      ctx.translate(this.x + 3, this.y + 3);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
       ctx.beginPath();
       ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+
+      // Dead body with gradient
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      const deadGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+      deadGrad.addColorStop(0, '#5a5a5a');
+      deadGrad.addColorStop(1, '#3a3a3a');
+      ctx.fillStyle = deadGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Blood pool
+      ctx.fillStyle = 'rgba(120, 0, 0, 0.6)';
+      ctx.beginPath();
+      ctx.ellipse(3, 5, this.radius * 0.8, this.radius * 0.5, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
       return;
     }
+
+    // Draw shadow first
+    ctx.save();
+    ctx.translate(this.x + 4, this.y + 4);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
 
-    let bodyColor = '#666666';
-    if (this.state === 'combat') bodyColor = '#aa3333';
-    else if (this.state === 'alert') bodyColor = '#aa6633';
-    else if (this.state === 'cover') bodyColor = '#336699';
-    else if (this.state === 'flanking') bodyColor = '#993399';
-    
-    ctx.fillStyle = bodyColor;
+    // Determine colors based on state
+    let baseColor, lightColor, darkColor;
+    if (this.state === 'combat') {
+      baseColor = '#aa3333'; lightColor = '#dd5555'; darkColor = '#771818';
+    } else if (this.state === 'alert') {
+      baseColor = '#aa6633'; lightColor = '#cc8855'; darkColor = '#774422';
+    } else if (this.state === 'cover') {
+      baseColor = '#336699'; lightColor = '#5588bb'; darkColor = '#224466';
+    } else if (this.state === 'flanking') {
+      baseColor = '#993399'; lightColor = '#bb55bb'; darkColor = '#662266';
+    } else {
+      baseColor = '#666666'; lightColor = '#888888'; darkColor = '#444444';
+    }
+
+    // Body gradient
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+    gradient.addColorStop(0, lightColor);
+    gradient.addColorStop(0.6, baseColor);
+    gradient.addColorStop(1, darkColor);
+    ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
+    // Body outline
+    ctx.strokeStyle = darkColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Flanker role highlight
     if (this.role === 'flanker') {
       ctx.strokeStyle = '#ffcc00';
       ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius + 2, 0, Math.PI * 2);
       ctx.stroke();
     }
 
-    ctx.fillStyle = '#333';
+    // Tactical gear detail
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.beginPath();
+    ctx.arc(0, -2, this.radius * 0.5, Math.PI, 0);
+    ctx.fill();
+
+    // Weapon with gradient
+    const weaponGrad = ctx.createLinearGradient(5, -2, 20, 2);
+    weaponGrad.addColorStop(0, '#2a2a2a');
+    weaponGrad.addColorStop(0.5, '#4a4a4a');
+    weaponGrad.addColorStop(1, '#1a1a1a');
+    ctx.fillStyle = weaponGrad;
     ctx.fillRect(5, -2, 15, 4);
+
+    // Weapon outline
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(5, -2, 15, 4);
+
+    // Muzzle flash with glow (if firing)
+    if (this.fireTimer > 0 && this.fireTimer < 3) {
+      ctx.shadowColor = '#ff6600';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#ffaa00';
+      ctx.beginPath();
+      ctx.arc(22, 0, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(22, 0, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // Direction indicator
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(this.radius - 3, 0, 2, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.restore();
 
-    const barWidth = 20;
-    const barHeight = 3;
+    // Enhanced health bar
+    const barWidth = 24;
+    const barHeight = 4;
     const x = this.x - barWidth/2;
-    const y = this.y - this.radius - 8;
+    const y = this.y - this.radius - 10;
 
-    ctx.fillStyle = '#333';
+    // Health bar background with shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x + 1, y + 1, barWidth, barHeight);
+    ctx.fillStyle = '#222';
     ctx.fillRect(x, y, barWidth, barHeight);
-    ctx.fillStyle = '#f44336';
-    ctx.fillRect(x, y, barWidth * (this.hp / this.maxHp), barHeight);
+
+    // Health bar fill with gradient
+    const healthPct = this.hp / this.maxHp;
+    if (healthPct > 0) {
+      const healthGrad = ctx.createLinearGradient(x, y, x, y + barHeight);
+      healthGrad.addColorStop(0, '#ff6666');
+      healthGrad.addColorStop(0.5, '#ff3333');
+      healthGrad.addColorStop(1, '#cc0000');
+      ctx.fillStyle = healthGrad;
+      ctx.fillRect(x + 1, y + 1, (barWidth - 2) * healthPct, barHeight - 2);
+
+      // Shine effect
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.fillRect(x + 1, y + 1, (barWidth - 2) * healthPct, 1);
+    }
+
+    // Health bar outline
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, barWidth, barHeight);
     
+    // Suppression indicator
     if (this.suppression > 0) {
-      ctx.fillStyle = `rgba(255, 255, 0, ${this.suppression * 0.3})`;
-      ctx.fillRect(x, y - 4, barWidth * (this.suppression / CONFIG.ENEMY_SUPPRESSION_THRESHOLD), 2);
+      const suppGrad = ctx.createLinearGradient(x, y - 5, x + barWidth, y - 5);
+      suppGrad.addColorStop(0, 'rgba(255, 255, 0, 0.8)');
+      suppGrad.addColorStop(1, 'rgba(255, 200, 0, 0.5)');
+      ctx.fillStyle = suppGrad;
+      ctx.fillRect(x, y - 5, barWidth * (this.suppression / CONFIG.ENEMY_SUPPRESSION_THRESHOLD), 2);
     }
   }
 }
@@ -4734,39 +4848,96 @@ class ShieldBearer extends Enemy {
       return;
     }
 
+    // Shadow
+    ctx.save();
+    ctx.translate(this.x + 4, this.y + 4);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
 
-    ctx.fillStyle = this.state === 'combat' ? '#3366aa' : '#4477bb';
+    // Body gradient
+    const baseColor = this.state === 'combat' ? '#3366aa' : '#4477bb';
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+    gradient.addColorStop(0, this.state === 'combat' ? '#5588cc' : '#6699dd');
+    gradient.addColorStop(0.6, baseColor);
+    gradient.addColorStop(1, this.state === 'combat' ? '#224488' : '#335599');
+    ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#5588cc';
+    // Body outline
+    ctx.strokeStyle = '#224488';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Shield with gradient and glow
+    ctx.shadowColor = '#5599ff';
+    ctx.shadowBlur = 8;
+    const shieldGrad = ctx.createRadialGradient(this.radius, 0, 0, this.radius, 0, this.radius + 6);
+    shieldGrad.addColorStop(0, '#7799dd');
+    shieldGrad.addColorStop(0.5, '#5588cc');
+    shieldGrad.addColorStop(1, '#4477bb');
+    ctx.fillStyle = shieldGrad;
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.arc(0, 0, this.radius + 6, -this.shieldArc/2, this.shieldArc/2);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = '#7799dd';
+    ctx.shadowBlur = 0;
+
+    // Shield edge highlight
+    ctx.strokeStyle = '#99bbff';
     ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius + 6, -this.shieldArc/2, this.shieldArc/2);
     ctx.stroke();
 
-    ctx.fillStyle = '#333';
+    // Weapon with gradient
+    const weaponGrad = ctx.createLinearGradient(5, -2, 17, 2);
+    weaponGrad.addColorStop(0, '#2a2a2a');
+    weaponGrad.addColorStop(0.5, '#4a4a4a');
+    weaponGrad.addColorStop(1, '#1a1a1a');
+    ctx.fillStyle = weaponGrad;
     ctx.fillRect(5, -2, 12, 4);
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(5, -2, 12, 4);
 
     ctx.restore();
 
-    const barWidth = 20;
-    const barHeight = 3;
+    // Enhanced health bar
+    const barWidth = 24;
+    const barHeight = 4;
     const x = this.x - barWidth/2;
-    const y = this.y - this.radius - 12;
+    const y = this.y - this.radius - 14;
 
-    ctx.fillStyle = '#333';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x + 1, y + 1, barWidth, barHeight);
+    ctx.fillStyle = '#222';
     ctx.fillRect(x, y, barWidth, barHeight);
-    ctx.fillStyle = '#4488ff';
-    ctx.fillRect(x, y, barWidth * (this.hp / this.maxHp), barHeight);
+
+    const healthPct = this.hp / this.maxHp;
+    if (healthPct > 0) {
+      const healthGrad = ctx.createLinearGradient(x, y, x, y + barHeight);
+      healthGrad.addColorStop(0, '#66aaff');
+      healthGrad.addColorStop(0.5, '#4488ff');
+      healthGrad.addColorStop(1, '#3366cc');
+      ctx.fillStyle = healthGrad;
+      ctx.fillRect(x + 1, y + 1, (barWidth - 2) * healthPct, barHeight - 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.fillRect(x + 1, y + 1, (barWidth - 2) * healthPct, 1);
+    }
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, barWidth, barHeight);
   }
 }
 
@@ -4838,36 +5009,94 @@ class Demolitionist extends Enemy {
       return;
     }
 
+    // Shadow
+    ctx.save();
+    ctx.translate(this.x + 4, this.y + 4);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
 
-    ctx.fillStyle = this.state === 'combat' ? '#cc4400' : '#aa5522';
+    // Body gradient
+    const baseColor = this.state === 'combat' ? '#cc4400' : '#aa5522';
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+    gradient.addColorStop(0, this.state === 'combat' ? '#ff6622' : '#cc7744');
+    gradient.addColorStop(0.6, baseColor);
+    gradient.addColorStop(1, this.state === 'combat' ? '#882200' : '#773311');
+    ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#333';
+    // Body outline
+    ctx.strokeStyle = '#662200';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Tactical gear detail
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.beginPath();
+    ctx.arc(0, -2, this.radius * 0.5, Math.PI, 0);
+    ctx.fill();
+
+    // Weapon with gradient
+    const weaponGrad = ctx.createLinearGradient(5, -2, 20, 2);
+    weaponGrad.addColorStop(0, '#2a2a2a');
+    weaponGrad.addColorStop(0.5, '#4a4a4a');
+    weaponGrad.addColorStop(1, '#1a1a1a');
+    ctx.fillStyle = weaponGrad;
     ctx.fillRect(5, -2, 15, 4);
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(5, -2, 15, 4);
 
     ctx.restore();
 
+    // Grenade indicators with glow
     for (let i = 0; i < this.grenadeCount; i++) {
-      ctx.fillStyle = '#446622';
+      ctx.shadowColor = '#88aa44';
+      ctx.shadowBlur = 4;
+      const grenGrad = ctx.createRadialGradient(this.x - 8 + i * 10, this.y + this.radius + 6, 0, this.x - 8 + i * 10, this.y + this.radius + 6, 5);
+      grenGrad.addColorStop(0, '#66aa44');
+      grenGrad.addColorStop(1, '#446622');
+      ctx.fillStyle = grenGrad;
       ctx.beginPath();
-      ctx.arc(this.x - 8 + i * 8, this.y + this.radius + 6, 4, 0, Math.PI * 2);
+      ctx.arc(this.x - 8 + i * 10, this.y + this.radius + 6, 5, 0, Math.PI * 2);
       ctx.fill();
+      ctx.shadowBlur = 0;
     }
 
-    const barWidth = 20;
-    const barHeight = 3;
+    // Enhanced health bar
+    const barWidth = 24;
+    const barHeight = 4;
     const x = this.x - barWidth/2;
-    const y = this.y - this.radius - 8;
+    const y = this.y - this.radius - 10;
 
-    ctx.fillStyle = '#333';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x + 1, y + 1, barWidth, barHeight);
+    ctx.fillStyle = '#222';
     ctx.fillRect(x, y, barWidth, barHeight);
-    ctx.fillStyle = '#ff6600';
-    ctx.fillRect(x, y, barWidth * (this.hp / this.maxHp), barHeight);
+
+    const healthPct = this.hp / this.maxHp;
+    if (healthPct > 0) {
+      const healthGrad = ctx.createLinearGradient(x, y, x, y + barHeight);
+      healthGrad.addColorStop(0, '#ff8833');
+      healthGrad.addColorStop(0.5, '#ff6600');
+      healthGrad.addColorStop(1, '#cc4400');
+      ctx.fillStyle = healthGrad;
+      ctx.fillRect(x + 1, y + 1, (barWidth - 2) * healthPct, barHeight - 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.fillRect(x + 1, y + 1, (barWidth - 2) * healthPct, 1);
+    }
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, barWidth, barHeight);
   }
 }
 
@@ -4932,28 +5161,70 @@ class Spotter extends Enemy {
       return;
     }
 
+    // Shadow
+    ctx.save();
+    ctx.translate(this.x + 4, this.y + 4);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
 
-    ctx.fillStyle = this.state === 'combat' ? '#9900cc' : '#7722aa';
+    // Body gradient
+    const baseColor = this.state === 'combat' ? '#9900cc' : '#7722aa';
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+    gradient.addColorStop(0, this.state === 'combat' ? '#bb44ee' : '#9944cc');
+    gradient.addColorStop(0.6, baseColor);
+    gradient.addColorStop(1, this.state === 'combat' ? '#660088' : '#551177');
+    ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
+    // Body outline
+    ctx.strokeStyle = '#551177';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Spotter aura ring with glow
+    ctx.shadowColor = '#cc44ff';
+    ctx.shadowBlur = 6;
     ctx.strokeStyle = '#cc44ff';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius + 3, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    ctx.fillStyle = '#333';
+    // Tactical gear detail
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.beginPath();
+    ctx.arc(0, -2, this.radius * 0.5, Math.PI, 0);
+    ctx.fill();
+
+    // Weapon with gradient
+    const weaponGrad = ctx.createLinearGradient(5, -2, 17, 2);
+    weaponGrad.addColorStop(0, '#2a2a2a');
+    weaponGrad.addColorStop(0.5, '#4a4a4a');
+    weaponGrad.addColorStop(1, '#1a1a1a');
+    ctx.fillStyle = weaponGrad;
     ctx.fillRect(5, -2, 12, 4);
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(5, -2, 12, 4);
 
     ctx.restore();
 
+    // Marked target line with glow
     if (this.spotTimer > 0 && this.markedTarget && !this.markedTarget.isDead) {
-      ctx.strokeStyle = `rgba(255, 0, 255, ${0.3 + Math.sin(Date.now() * 0.01) * 0.2})`;
+      ctx.shadowColor = '#ff00ff';
+      ctx.shadowBlur = 8;
+      ctx.strokeStyle = `rgba(255, 0, 255, ${0.4 + Math.sin(Date.now() * 0.01) * 0.2})`;
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
@@ -4961,6 +5232,7 @@ class Spotter extends Enemy {
       ctx.lineTo(this.markedTarget.x, this.markedTarget.y);
       ctx.stroke();
       ctx.setLineDash([]);
+      ctx.shadowBlur = 0;
       
       ctx.strokeStyle = '#ff00ff';
       ctx.lineWidth = 2;
@@ -4969,15 +5241,31 @@ class Spotter extends Enemy {
       ctx.stroke();
     }
 
-    const barWidth = 20;
-    const barHeight = 3;
+    // Enhanced health bar
+    const barWidth = 24;
+    const barHeight = 4;
     const x = this.x - barWidth/2;
-    const y = this.y - this.radius - 8;
+    const y = this.y - this.radius - 10;
 
-    ctx.fillStyle = '#333';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x + 1, y + 1, barWidth, barHeight);
+    ctx.fillStyle = '#222';
     ctx.fillRect(x, y, barWidth, barHeight);
-    ctx.fillStyle = '#cc44ff';
-    ctx.fillRect(x, y, barWidth * (this.hp / this.maxHp), barHeight);
+
+    const healthPct = this.hp / this.maxHp;
+    if (healthPct > 0) {
+      const healthGrad = ctx.createLinearGradient(x, y, x, y + barHeight);
+      healthGrad.addColorStop(0, '#dd66ff');
+      healthGrad.addColorStop(0.5, '#cc44ff');
+      healthGrad.addColorStop(1, '#9933cc');
+      ctx.fillStyle = healthGrad;
+      ctx.fillRect(x + 1, y + 1, (barWidth - 2) * healthPct, barHeight - 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.fillRect(x + 1, y + 1, (barWidth - 2) * healthPct, 1);
+    }
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, barWidth, barHeight);
   }
 }
 
@@ -5095,38 +5383,77 @@ class Boss extends Enemy {
       return;
     }
 
+    // Draw shadow first
+    ctx.save();
+    ctx.translate(this.x + 5, this.y + 5);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
     // Draw boss with special appearance
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
 
     // Draw glow effect for boss
-    const gradient = ctx.createRadialGradient(0, 0, this.radius * 0.5, 0, 0, this.radius * 2);
-    gradient.addColorStop(0, 'rgba(255, 50, 50, 0.3)');
-    gradient.addColorStop(1, 'rgba(255, 50, 50, 0)');
-    ctx.fillStyle = gradient;
+    ctx.shadowColor = '#ff3333';
+    ctx.shadowBlur = 15;
+    const glowGradient = ctx.createRadialGradient(0, 0, this.radius * 0.5, 0, 0, this.radius * 2);
+    glowGradient.addColorStop(0, 'rgba(255, 50, 50, 0.4)');
+    glowGradient.addColorStop(1, 'rgba(255, 50, 50, 0)');
+    ctx.fillStyle = glowGradient;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius * 2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
 
-    // Boss body (larger, red tint)
-    ctx.fillStyle = '#8b0000'; // Dark red
-    ctx.strokeStyle = '#ff0000'; // Bright red outline
-    ctx.lineWidth = 3;
+    // Boss body with gradient
+    const bodyGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+    bodyGrad.addColorStop(0, '#cc2222');
+    bodyGrad.addColorStop(0.6, '#8b0000');
+    bodyGrad.addColorStop(1, '#550000');
+    ctx.fillStyle = bodyGrad;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.stroke();
 
-    // Weapon
-    ctx.fillStyle = '#222';
+    // Body outline with glow
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = '#ff3333';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Tactical gear detail
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.beginPath();
+    ctx.arc(0, -2, this.radius * 0.5, Math.PI, 0);
+    ctx.fill();
+
+    // Weapon with gradient
+    const weaponGrad = ctx.createLinearGradient(0, -4, this.radius + 8, 4);
+    weaponGrad.addColorStop(0, '#2a2a2a');
+    weaponGrad.addColorStop(0.5, '#4a4a4a');
+    weaponGrad.addColorStop(1, '#1a1a1a');
+    ctx.fillStyle = weaponGrad;
     ctx.fillRect(0, -3, this.radius + 8, 6);
-    ctx.fillStyle = '#444';
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, -3, this.radius + 8, 6);
+
+    // Weapon extension
+    ctx.fillStyle = '#555';
     ctx.fillRect(this.radius, -5, 8, 10);
 
-    // Boss crown/marker
-    ctx.fillStyle = '#ffd700'; // Gold
-    ctx.strokeStyle = '#ff8c00'; // Orange outline
+    // Boss crown/marker with glow
+    ctx.shadowColor = '#ffd700';
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = '#ffd700';
+    ctx.strokeStyle = '#ff8c00';
     ctx.lineWidth = 1;
     for (let i = 0; i < 5; i++) {
       const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
@@ -5143,6 +5470,22 @@ class Boss extends Enemy {
       ctx.fill();
       ctx.stroke();
     }
+    ctx.shadowBlur = 0;
+
+    // Muzzle flash with glow (if firing)
+    if (this.fireTimer > 0 && this.fireTimer < 3) {
+      ctx.shadowColor = '#ff6600';
+      ctx.shadowBlur = 15;
+      ctx.fillStyle = '#ffaa00';
+      ctx.beginPath();
+      ctx.arc(this.radius + 10, 0, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(this.radius + 10, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
 
     ctx.restore();
 
@@ -5150,43 +5493,89 @@ class Boss extends Enemy {
     const barWidth = 60;
     const barHeight = 6;
     const x = this.x - barWidth/2;
-    const y = this.y - this.radius - 15;
+    const y = this.y - this.radius - 18;
+
+    // Health bar shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(x + 2, y + 2, barWidth, barHeight);
 
     // Background
-    ctx.fillStyle = '#000';
-    ctx.fillRect(x - 2, y - 2, barWidth + 4, barHeight + 4);
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x - 1, y - 1, barWidth + 2, barHeight + 2);
 
-    ctx.fillStyle = '#333';
-    ctx.fillRect(x, y, barWidth, barHeight);
-
-    // HP bar with color based on health
+    // HP bar with gradient based on health
     const hpPercent = this.hp / this.maxHp;
-    const barColor = hpPercent > 0.7 ? '#ff0000' :
-                     hpPercent > 0.3 ? '#ff6600' : '#ffaa00';
-    ctx.fillStyle = barColor;
-    ctx.fillRect(x, y, barWidth * hpPercent, barHeight);
+    if (hpPercent > 0) {
+      const healthGrad = ctx.createLinearGradient(x, y, x, y + barHeight);
+      if (hpPercent > 0.7) {
+        healthGrad.addColorStop(0, '#ff5555');
+        healthGrad.addColorStop(0.5, '#ff0000');
+        healthGrad.addColorStop(1, '#aa0000');
+      } else if (hpPercent > 0.3) {
+        healthGrad.addColorStop(0, '#ff9944');
+        healthGrad.addColorStop(0.5, '#ff6600');
+        healthGrad.addColorStop(1, '#cc4400');
+      } else {
+        healthGrad.addColorStop(0, '#ffcc66');
+        healthGrad.addColorStop(0.5, '#ffaa00');
+        healthGrad.addColorStop(1, '#cc8800');
+      }
+      ctx.fillStyle = healthGrad;
+      ctx.fillRect(x, y, barWidth * hpPercent, barHeight);
 
-    // Boss label
-    ctx.fillStyle = '#ffd700';
+      // Shine effect
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.fillRect(x, y, barWidth * hpPercent, 2);
+    }
+
+    // Health bar outline
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x - 1, y - 1, barWidth + 2, barHeight + 2);
+
+    // Boss label with shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.font = 'bold 10px Arial';
     ctx.textAlign = 'center';
+    ctx.fillText('BOSS', this.x + 1, y - 4);
+    ctx.fillStyle = '#ffd700';
     ctx.fillText('BOSS', this.x, y - 5);
   }
 
   drawDead(ctx) {
-    // Draw dead boss similar to enemy but with red tint
+    // Dead boss shadow
     ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.fillStyle = '#4d0000'; // Dark red
-    ctx.strokeStyle = '#ff0000';
-    ctx.lineWidth = 2;
+    ctx.translate(this.x + 4, this.y + 4);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+
+    // Dead boss body with gradient
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    const deadGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+    deadGrad.addColorStop(0, '#6d0000');
+    deadGrad.addColorStop(1, '#3d0000');
+    ctx.fillStyle = deadGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outline
+    ctx.strokeStyle = '#ff0000';
+    ctx.lineWidth = 2;
     ctx.stroke();
 
+    // Blood pool
+    ctx.fillStyle = 'rgba(100, 0, 0, 0.7)';
+    ctx.beginPath();
+    ctx.ellipse(4, 6, this.radius * 1.0, this.radius * 0.6, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
     // X mark
-    ctx.strokeStyle = '#ff0000';
+    ctx.strokeStyle = '#ff3333';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(-this.radius * 0.5, -this.radius * 0.5);
