@@ -2725,55 +2725,394 @@ class Level {
   }
 
   draw(ctx) {
-    // Floor
-    ctx.fillStyle = '#2a2a35';
+    // Enhanced floor with procedural concrete texture
+    this.drawEnhancedFloor(ctx);
+
+    // Draw wall shadows first (behind walls)
+    this.drawWallShadows(ctx);
+
+    // Enhanced walls with texture and depth
+    this.drawEnhancedWalls(ctx);
+
+    // Enhanced doors
+    this.drawEnhancedDoors(ctx);
+
+    // Decorations (vegetation, crates, barrels, etc.)
+    this.drawDecorations(ctx);
+
+    // Objectives
+    this.drawObjectives(ctx);
+  }
+
+  drawObjectives(ctx) {
+    for (const obj of this.objectives) {
+      if (obj.secured) continue;
+      const colors = {
+        hostage: { fill: '#ffff0044', stroke: '#ffff00', glow: '#ffff00' },
+        intel: { fill: '#00ff0044', stroke: '#00ff00', glow: '#00ff00' },
+        bomb: { fill: '#ff000044', stroke: '#ff0000', glow: '#ff0000' }
+      };
+      const color = colors[obj.type] || colors.hostage;
+
+      // Pulsing glow effect
+      const pulse = 0.5 + Math.sin(Date.now() * 0.005) * 0.3;
+      ctx.shadowColor = color.glow;
+      ctx.shadowBlur = 15 * pulse;
+
+      ctx.fillStyle = color.fill;
+      ctx.beginPath();
+      ctx.arc(obj.x, obj.y, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = color.stroke;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  drawEnhancedFloor(ctx) {
+    // Base floor color - darker concrete
+    ctx.fillStyle = '#1e2028';
     ctx.fillRect(0, 0, CONFIG.MAP_WIDTH, CONFIG.MAP_HEIGHT);
 
-    // Grid pattern
-    ctx.strokeStyle = '#333340';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < CONFIG.MAP_WIDTH; x += 50) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, CONFIG.MAP_HEIGHT);
-      ctx.stroke();
-    }
-    for (let y = 0; y < CONFIG.MAP_HEIGHT; y += 50) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(CONFIG.MAP_WIDTH, y);
-      ctx.stroke();
+    // Procedural concrete/industrial floor tiles
+    const tileSize = 100;
+    for (let x = 0; x < CONFIG.MAP_WIDTH; x += tileSize) {
+      for (let y = 0; y < CONFIG.MAP_HEIGHT; y += tileSize) {
+        // Vary tile brightness slightly
+        const seed = (x * 7 + y * 13) % 100;
+        const brightness = 28 + (seed % 8);
+        ctx.fillStyle = `rgb(${brightness}, ${brightness + 2}, ${brightness + 6})`;
+        ctx.fillRect(x + 1, y + 1, tileSize - 2, tileSize - 2);
+
+        // Tile grout/gap lines
+        ctx.strokeStyle = '#0a0c10';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, tileSize, tileSize);
+
+        // Add subtle concrete texture noise
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+        for (let i = 0; i < 5; i++) {
+          const nx = x + ((seed * (i + 1) * 17) % tileSize);
+          const ny = y + ((seed * (i + 2) * 23) % tileSize);
+          const size = 2 + (seed % 4);
+          ctx.beginPath();
+          ctx.arc(nx, ny, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Dark stain spots for realism
+        if (seed % 7 === 0) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+          const stainX = x + 20 + (seed % 60);
+          const stainY = y + 20 + ((seed * 3) % 60);
+          ctx.beginPath();
+          ctx.ellipse(stainX, stainY, 15 + (seed % 20), 10 + (seed % 15), seed * 0.1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     }
 
-    // Walls
+    // Metal grating/drainage pattern in some areas
+    for (let x = 200; x < CONFIG.MAP_WIDTH; x += 600) {
+      for (let y = 200; y < CONFIG.MAP_HEIGHT; y += 600) {
+        this.drawMetalGrating(ctx, x, y, 80, 80);
+      }
+    }
+  }
+
+  drawMetalGrating(ctx, x, y, w, h) {
+    // Metal grate frame
+    ctx.fillStyle = '#2a3040';
+    ctx.fillRect(x, y, w, h);
+
+    // Grate holes pattern
+    ctx.fillStyle = '#0a0c10';
+    const spacing = 10;
+    for (let gx = x + 5; gx < x + w - 5; gx += spacing) {
+      for (let gy = y + 5; gy < y + h - 5; gy += spacing) {
+        ctx.fillRect(gx, gy, 6, 6);
+      }
+    }
+
+    // Metal frame border
+    ctx.strokeStyle = '#3a4555';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, w, h);
+
+    // Highlight edge
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + w, y);
+    ctx.lineTo(x + w, y + h);
+    ctx.stroke();
+  }
+
+  drawWallShadows(ctx) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    const shadowOffset = 8;
+
+    for (const wall of this.walls) {
+      if (wall.destroyed) continue;
+      // Draw shadow offset to bottom-right
+      ctx.fillRect(wall.x + shadowOffset, wall.y + shadowOffset, wall.w, wall.h);
+    }
+
+    for (const door of this.doors) {
+      if (door.destroyed || door.open) continue;
+      ctx.fillRect(door.x + shadowOffset, door.y + shadowOffset, door.w, door.h);
+    }
+  }
+
+  drawEnhancedWalls(ctx) {
     for (const wall of this.walls) {
       if (wall.destroyed) {
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+        // Rubble for destroyed walls
+        this.drawRubble(ctx, wall.x, wall.y, wall.w, wall.h);
         continue;
       }
 
-      ctx.fillStyle = wall.material.color;
+      // Base wall color with gradient effect
+      const baseColor = wall.material.color;
+      const gradient = ctx.createLinearGradient(wall.x, wall.y, wall.x + wall.w, wall.y + wall.h);
+      gradient.addColorStop(0, this.lightenColor(baseColor, 15));
+      gradient.addColorStop(0.5, baseColor);
+      gradient.addColorStop(1, this.darkenColor(baseColor, 20));
+      ctx.fillStyle = gradient;
       ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
 
-      // Damage indication
-      if (wall.hp < 100) {
-        ctx.fillStyle = `rgba(0,0,0,${0.5 - wall.hp/200})`;
-        ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+      // Wall texture pattern based on material
+      if (wall.materialName === 'concrete') {
+        this.drawConcreteTexture(ctx, wall.x, wall.y, wall.w, wall.h);
+      } else if (wall.materialName === 'metal') {
+        this.drawMetalTexture(ctx, wall.x, wall.y, wall.w, wall.h);
+      } else if (wall.materialName === 'wood') {
+        this.drawWoodTexture(ctx, wall.x, wall.y, wall.w, wall.h);
+      } else if (wall.materialName === 'drywall') {
+        this.drawDrywallTexture(ctx, wall.x, wall.y, wall.w, wall.h);
       }
+
+      // Top edge highlight (3D effect)
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(wall.x, wall.y);
+      ctx.lineTo(wall.x + wall.w, wall.y);
+      ctx.stroke();
+
+      // Left edge highlight
+      ctx.beginPath();
+      ctx.moveTo(wall.x, wall.y);
+      ctx.lineTo(wall.x, wall.y + wall.h);
+      ctx.stroke();
+
+      // Bottom/right edge shadow
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.beginPath();
+      ctx.moveTo(wall.x + wall.w, wall.y);
+      ctx.lineTo(wall.x + wall.w, wall.y + wall.h);
+      ctx.lineTo(wall.x, wall.y + wall.h);
+      ctx.stroke();
+
+      // Damage cracks
+      if (wall.hp < 100) {
+        this.drawDamageCracks(ctx, wall.x, wall.y, wall.w, wall.h, 1 - wall.hp / 100);
+      }
+    }
+  }
+
+  drawConcreteTexture(ctx, x, y, w, h) {
+    // Subtle concrete speckles
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+    const seed = x * 7 + y * 13;
+    for (let i = 0; i < Math.min(w * h / 100, 20); i++) {
+      const px = x + ((seed * (i + 1) * 17) % w);
+      const py = y + ((seed * (i + 2) * 23) % h);
+      ctx.beginPath();
+      ctx.arc(px, py, 1 + (i % 2), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  drawMetalTexture(ctx, x, y, w, h) {
+    // Horizontal metal panel lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    for (let ly = y + 15; ly < y + h; ly += 20) {
+      ctx.beginPath();
+      ctx.moveTo(x + 2, ly);
+      ctx.lineTo(x + w - 2, ly);
+      ctx.stroke();
     }
 
-    // Doors
+    // Rivet dots
+    ctx.fillStyle = 'rgba(100, 100, 120, 0.5)';
+    for (let rx = x + 8; rx < x + w; rx += 25) {
+      ctx.beginPath();
+      ctx.arc(rx, y + 5, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(rx, y + h - 5, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  drawWoodTexture(ctx, x, y, w, h) {
+    // Wood grain lines
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+    ctx.lineWidth = 1;
+    const grainSpacing = 8;
+    for (let gy = y; gy < y + h; gy += grainSpacing) {
+      const waveOffset = Math.sin(gy * 0.1) * 3;
+      ctx.beginPath();
+      ctx.moveTo(x, gy);
+      ctx.quadraticCurveTo(x + w / 2, gy + waveOffset, x + w, gy);
+      ctx.stroke();
+    }
+  }
+
+  drawDrywallTexture(ctx, x, y, w, h) {
+    // Subtle drywall bumps
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    const seed = x * 11 + y * 17;
+    for (let i = 0; i < Math.min(w * h / 150, 15); i++) {
+      const px = x + ((seed * (i + 1) * 13) % w);
+      const py = y + ((seed * (i + 2) * 19) % h);
+      ctx.beginPath();
+      ctx.arc(px, py, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  drawDamageCracks(ctx, x, y, w, h, damage) {
+    ctx.strokeStyle = `rgba(20, 20, 20, ${0.3 + damage * 0.5})`;
+    ctx.lineWidth = 1 + damage * 2;
+
+    const numCracks = Math.floor(damage * 5) + 1;
+    const seed = x * 7 + y * 11;
+
+    for (let i = 0; i < numCracks; i++) {
+      const startX = x + ((seed * (i + 1)) % w);
+      const startY = y + ((seed * (i + 2)) % h);
+
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+
+      let cx = startX, cy = startY;
+      for (let j = 0; j < 3; j++) {
+        cx += ((seed * (j + 3)) % 20) - 10;
+        cy += ((seed * (j + 4)) % 20) - 10;
+        cx = Math.max(x, Math.min(x + w, cx));
+        cy = Math.max(y, Math.min(y + h, cy));
+        ctx.lineTo(cx, cy);
+      }
+      ctx.stroke();
+    }
+
+    // Bullet holes
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    for (let i = 0; i < Math.floor(damage * 3); i++) {
+      const hx = x + ((seed * (i + 5)) % w);
+      const hy = y + ((seed * (i + 6)) % h);
+      ctx.beginPath();
+      ctx.arc(hx, hy, 2 + (i % 2), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  drawRubble(ctx, x, y, w, h) {
+    // Dark rubble background
+    ctx.fillStyle = '#0a0c10';
+    ctx.fillRect(x, y, w, h);
+
+    // Rubble pieces
+    const seed = x * 13 + y * 17;
+    const numPieces = Math.floor((w * h) / 80);
+
+    for (let i = 0; i < numPieces; i++) {
+      const px = x + ((seed * (i + 1) * 7) % w);
+      const py = y + ((seed * (i + 2) * 11) % h);
+      const size = 3 + (i % 8);
+      const shade = 30 + ((seed * i) % 40);
+
+      ctx.fillStyle = `rgb(${shade}, ${shade - 5}, ${shade - 10})`;
+      ctx.beginPath();
+      ctx.moveTo(px, py - size);
+      ctx.lineTo(px + size, py);
+      ctx.lineTo(px, py + size);
+      ctx.lineTo(px - size, py);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  drawEnhancedDoors(ctx) {
     for (const door of this.doors) {
       if (door.destroyed) {
-        ctx.fillStyle = '#1a1a1a';
-      } else if (door.open) {
-        ctx.fillStyle = '#3a3a3a';
-      } else {
-        ctx.fillStyle = door.material.color;
+        this.drawRubble(ctx, door.x, door.y, door.w, door.h);
+        continue;
       }
-      ctx.fillRect(door.x, door.y, door.w, door.h);
+
+      if (door.open) {
+        // Open door - just frame visible
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(door.x, door.y, door.w, door.h);
+        ctx.strokeStyle = '#3a3a3a';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(door.x, door.y, door.w, door.h);
+      } else {
+        // Closed door with wood grain
+        const gradient = ctx.createLinearGradient(door.x, door.y, door.x + door.w, door.y);
+        gradient.addColorStop(0, '#7a5a3a');
+        gradient.addColorStop(0.5, '#654321');
+        gradient.addColorStop(1, '#5a4020');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(door.x, door.y, door.w, door.h);
+
+        // Door frame
+        ctx.strokeStyle = '#4a3520';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(door.x, door.y, door.w, door.h);
+
+        // Door handle
+        const handleX = door.w > door.h ? door.x + door.w - 10 : door.x + door.w / 2;
+        const handleY = door.w > door.h ? door.y + door.h / 2 : door.y + door.h - 10;
+        ctx.fillStyle = '#8a8a6a';
+        ctx.beginPath();
+        ctx.arc(handleX, handleY, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Highlight
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(door.x + 1, door.y + 1);
+        ctx.lineTo(door.x + door.w - 1, door.y + 1);
+        ctx.stroke();
+      }
     }
+  }
+
+  lightenColor(hex, percent) {
+    const num = parseInt(hex.replace('#', ''), 16);
+    const r = Math.min(255, (num >> 16) + percent);
+    const g = Math.min(255, ((num >> 8) & 0x00FF) + percent);
+    const b = Math.min(255, (num & 0x0000FF) + percent);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  darkenColor(hex, percent) {
+    const num = parseInt(hex.replace('#', ''), 16);
+    const r = Math.max(0, (num >> 16) - percent);
+    const g = Math.max(0, ((num >> 8) & 0x00FF) - percent);
+    const b = Math.max(0, (num & 0x0000FF) - percent);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  drawDecorations(ctx) {
 
     // Decorations (vegetation, crates, barrels, etc.)
     for (const dec of this.decorations) {
@@ -3013,25 +3352,6 @@ class Level {
       }
 
       ctx.restore();
-    }
-
-    // Objectives
-    for (const obj of this.objectives) {
-      if (obj.secured) continue;
-      // Different colors for different objective types
-      const colors = {
-        hostage: { fill: '#ffff0044', stroke: '#ffff00' },
-        intel: { fill: '#00ff0044', stroke: '#00ff00' },
-        bomb: { fill: '#ff000044', stroke: '#ff0000' }
-      };
-      const color = colors[obj.type] || colors.hostage;
-      ctx.fillStyle = color.fill;
-      ctx.beginPath();
-      ctx.arc(obj.x, obj.y, 20, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = color.stroke;
-      ctx.lineWidth = 2;
-      ctx.stroke();
     }
   }
 
@@ -3547,55 +3867,113 @@ class Player {
 
     const leanOffsetX = Math.cos(this.angle + Math.PI/2) * this.lean * CONFIG.LEAN_DISTANCE;
     const leanOffsetY = Math.sin(this.angle + Math.PI/2) * this.lean * CONFIG.LEAN_DISTANCE;
+    const bodySize = this.stance === 'prone' ? this.radius * 1.3 : this.radius;
+
+    // Draw shadow first
+    ctx.save();
+    ctx.translate(this.x + leanOffsetX + 4, this.y + leanOffsetY + 4);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.beginPath();
+    ctx.arc(0, 0, bodySize, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
     ctx.save();
     ctx.translate(this.x + leanOffsetX, this.y + leanOffsetY);
     ctx.rotate(this.angle);
 
-    // Body
-    const bodySize = this.stance === 'prone' ? this.radius * 1.3 : this.radius;
-    ctx.fillStyle = this.team === 'blue' ? '#4a7cc9' : '#c94a4a';
+    // Outer glow for local player
+    if (this.isLocal) {
+      ctx.shadowColor = '#4a9fff';
+      ctx.shadowBlur = 8;
+    }
+
+    // Body gradient
+    const baseColor = this.team === 'blue' ? '#4a7cc9' : '#c94a4a';
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, bodySize);
+    gradient.addColorStop(0, this.team === 'blue' ? '#6a9cff' : '#ff6a6a');
+    gradient.addColorStop(0.6, baseColor);
+    gradient.addColorStop(1, this.team === 'blue' ? '#3a5a8a' : '#8a3a3a');
+    ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(0, 0, bodySize, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
 
-    // Stance indicator
+    // Body outline
+    ctx.strokeStyle = this.team === 'blue' ? '#2a4a7a' : '#7a2a2a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Stance indicator ring
     if (this.stance === 'crouch') {
-      ctx.strokeStyle = '#ffffff44';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
       ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, bodySize + 2, 0, Math.PI * 2);
       ctx.stroke();
     } else if (this.stance === 'prone') {
-      ctx.strokeStyle = '#ffffff66';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
       ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, bodySize + 3, 0, Math.PI * 2);
       ctx.stroke();
     }
 
-    // Weapon
-    ctx.fillStyle = '#333';
+    // Tactical vest/gear detail
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.beginPath();
+    ctx.arc(0, -2, bodySize * 0.5, Math.PI, 0);
+    ctx.fill();
+
+    // Weapon with gradient
     const weaponLen = this.isADS ? 25 : 20;
+    const weaponGrad = ctx.createLinearGradient(5, -3, 5 + weaponLen, 3);
+    weaponGrad.addColorStop(0, '#2a2a2a');
+    weaponGrad.addColorStop(0.5, '#4a4a4a');
+    weaponGrad.addColorStop(1, '#1a1a1a');
+    ctx.fillStyle = weaponGrad;
     ctx.fillRect(5, -3, weaponLen - this.recoilOffset, 6);
 
-    // Muzzle flash
+    // Weapon outline
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(5, -3, weaponLen - this.recoilOffset, 6);
+
+    // Muzzle flash with glow
     if (this.muzzleFlash > 0) {
-      ctx.fillStyle = '#ffaa00';
+      ctx.shadowColor = '#ffaa00';
+      ctx.shadowBlur = 15;
+      ctx.fillStyle = '#ffee00';
       ctx.beginPath();
-      ctx.arc(weaponLen + 5, 0, 8, 0, Math.PI * 2);
+      ctx.arc(weaponLen + 5, 0, 6, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(weaponLen + 5, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
     }
 
-    // Direction indicator
+    // Direction indicator with glow
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(bodySize - 3, 0, 3, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     ctx.restore();
 
-    // Name
+    // Name with shadow
     if (!this.isLocal) {
-      ctx.fillStyle = '#aaa';
-      ctx.font = '10px Arial';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.font = 'bold 10px Arial';
       ctx.textAlign = 'center';
+      ctx.fillText(this.name, this.x + 1, this.y - 24);
+      ctx.fillStyle = '#ddd';
       ctx.fillText(this.name, this.x, this.y - 25);
     }
 
@@ -3604,16 +3982,37 @@ class Player {
   }
 
   drawDead(ctx) {
+    // Dead body shadow
+    ctx.save();
+    ctx.translate(this.x + 3, this.y + 3);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
     ctx.save();
     ctx.translate(this.x, this.y);
-    ctx.fillStyle = '#4a4a4a';
+
+    // Dead body
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+    gradient.addColorStop(0, '#5a5a5a');
+    gradient.addColorStop(1, '#3a3a3a');
+    ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
+    // Blood pool
+    ctx.fillStyle = 'rgba(120, 0, 0, 0.6)';
+    ctx.beginPath();
+    ctx.ellipse(3, 5, this.radius * 0.8, this.radius * 0.5, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
     // X mark
-    ctx.strokeStyle = '#aa0000';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#cc0000';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(-5, -5);
     ctx.lineTo(5, 5);
@@ -3624,17 +4023,38 @@ class Player {
   }
 
   drawHealthBar(ctx) {
-    const barWidth = 30;
-    const barHeight = 4;
+    const barWidth = 32;
+    const barHeight = 5;
     const x = this.x - barWidth/2;
-    const y = this.y - this.radius - 12;
+    const y = this.y - this.radius - 14;
 
-    ctx.fillStyle = '#333';
+    // Background with border
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(x - 1, y - 1, barWidth + 2, barHeight + 2);
+
+    // Dark inner
+    ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(x, y, barWidth, barHeight);
 
+    // Health fill with gradient
     const hpPct = this.hp / this.maxHp;
-    ctx.fillStyle = hpPct > 0.6 ? '#4caf50' : hpPct > 0.3 ? '#ffeb3b' : '#f44336';
+    const healthGrad = ctx.createLinearGradient(x, y, x, y + barHeight);
+    if (hpPct > 0.6) {
+      healthGrad.addColorStop(0, '#6cff6c');
+      healthGrad.addColorStop(1, '#2ca02c');
+    } else if (hpPct > 0.3) {
+      healthGrad.addColorStop(0, '#ffff6c');
+      healthGrad.addColorStop(1, '#c9a000');
+    } else {
+      healthGrad.addColorStop(0, '#ff6c6c');
+      healthGrad.addColorStop(1, '#a02c2c');
+    }
+    ctx.fillStyle = healthGrad;
     ctx.fillRect(x, y, barWidth * hpPct, barHeight);
+
+    // Health bar shine
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.fillRect(x, y, barWidth * hpPct, barHeight / 2);
   }
 }
 
