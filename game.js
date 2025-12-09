@@ -6508,132 +6508,14 @@ class Game {
     const healthPercent = (this.player.hp / this.player.maxHp) * 100;
     document.getElementById('health-fill').style.width = `${healthPercent}%`;
     
-    const armorFill = document.getElementById('armor-fill');
-    if (armorFill) {
-      const maxArmor = 60;
-      armorFill.style.width = `${Math.min(100, (this.player.armor / maxArmor) * 100)}%`;
+    const hpText = document.getElementById('hp-text');
+    if (hpText) {
+      hpText.textContent = Math.round(this.player.hp);
     }
-    
-    document.getElementById('stance-text').textContent =
-      this.player.stance.charAt(0).toUpperCase() + this.player.stance.slice(1) +
-      (this.player.isADS ? ' (ADS)' : '');
 
     const g = this.player.grenades;
     document.getElementById('grenade-count').textContent =
       `${this.player.selectedGrenade.toUpperCase()}: ${g[this.player.selectedGrenade]}`;
-
-    document.getElementById('enemies-count').textContent =
-      `Enemies: ${this.enemies.filter(e => !e.isDead).length}`;
-
-    const classIcon = document.getElementById('soldier-class-icon');
-    const className = document.getElementById('soldier-class-name');
-    if (classIcon && className && this.player.classData) {
-      classIcon.textContent = this.player.classData.icon;
-      classIcon.style.background = this.player.classData.color;
-      className.textContent = this.player.classData.name;
-    }
-
-    const statHp = document.getElementById('stat-hp');
-    const statArmor = document.getElementById('stat-armor');
-    const statSpeed = document.getElementById('stat-speed');
-    const statAccuracy = document.getElementById('stat-accuracy');
-    if (statHp) statHp.textContent = Math.round(this.player.hp);
-    if (statArmor) statArmor.textContent = this.player.armor;
-    if (statSpeed) statSpeed.textContent = `${Math.round(this.player.getSpeedMultiplier() * 100)}%`;
-    if (statAccuracy) statAccuracy.textContent = `${Math.round(this.player.getAccuracyMultiplier() * 100)}%`;
-
-    const gearHudList = document.getElementById('gear-hud-list');
-    if (gearHudList && this.player.gear) {
-      const gearItems = [];
-      
-      if (this.player.weapons && this.player.weapons.length > 0) {
-        const weaponNames = this.player.weapons.map(w => CONFIG.WEAPONS[w]?.name || w).join(' + ');
-        gearItems.push(`<span class="gear-item-hud weapon" title="Weapons">${weaponNames}</span>`);
-      }
-      
-      if (this.player.gear.body) {
-        const bodyGear = CONFIG.GEAR[this.player.gear.body];
-        if (bodyGear) {
-          gearItems.push(`<span class="gear-item-hud armor" title="Body Armor">${bodyGear.name}</span>`);
-        }
-      }
-      
-      if (this.player.gear.head) {
-        const headGear = CONFIG.GEAR[this.player.gear.head];
-        if (headGear) {
-          gearItems.push(`<span class="gear-item-hud armor" title="Helmet">${headGear.name}</span>`);
-        }
-      }
-      
-      if (this.player.gear.tactical) {
-        const tactGear = CONFIG.GEAR[this.player.gear.tactical];
-        if (tactGear) {
-          let tactName = tactGear.name;
-          if (tactGear.grenades) {
-            const grenadeType = Object.keys(tactGear.grenades)[0];
-            const count = this.player.grenades[grenadeType] || 0;
-            tactName = `${grenadeType.charAt(0).toUpperCase() + grenadeType.slice(1)} x${count}`;
-          }
-          gearItems.push(`<span class="gear-item-hud tactical" title="Tactical">${tactName}</span>`);
-        }
-      }
-      
-      gearHudList.innerHTML = gearItems.join('');
-    }
-
-    // Update formation display
-    const formationEl = document.getElementById('formation-text');
-    if (formationEl) {
-      formationEl.textContent = CONFIG.FORMATIONS[this.currentFormation].name;
-    }
-
-    // Update score display
-    const scoreEl = document.getElementById('score-display');
-    if (scoreEl) {
-      scoreEl.textContent = this.score.toLocaleString();
-    }
-
-    // Update multiplier display
-    const multiplierEl = document.getElementById('multiplier-display');
-    if (multiplierEl) {
-      multiplierEl.textContent = `x${this.multiplier.toFixed(1)}`;
-      // Add pulse effect when high multiplier
-      if (this.multiplier >= 5) {
-        multiplierEl.style.textShadow = '0 0 15px rgba(255, 71, 87, 0.8)';
-      } else {
-        multiplierEl.style.textShadow = '0 0 10px rgba(255, 71, 87, 0.5)';
-      }
-    }
-
-    // Update FUN meter
-    const funFillEl = document.getElementById('fun-fill');
-    if (funFillEl) {
-      funFillEl.style.width = `${this.funMeter}%`;
-      // Pulse when active
-      if (this.funActive) {
-        const pulse = Math.sin(Date.now() / 100) * 0.2 + 0.8;
-        funFillEl.style.opacity = pulse;
-      } else {
-        funFillEl.style.opacity = '1';
-      }
-    }
-
-    // Update difficulty display
-    const difficultyEl = document.getElementById('difficulty-display');
-    if (difficultyEl) {
-      const label = this.difficultyDirector.getDifficultyLabel();
-      difficultyEl.textContent = label;
-      
-      // Color code difficulty
-      const colors = {
-        'Easy': '#4ade80',
-        'Normal': '#fbbf24',
-        'Hard': '#f97316',
-        'Intense': '#ef4444',
-        'Nightmare': '#dc2626'
-      };
-      difficultyEl.style.color = colors[label] || '#ffffff';
-    }
   }
 
   draw() {

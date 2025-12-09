@@ -165,51 +165,12 @@
     <!-- HUD -->
     <div id="hud" style="display: none;">
       <div class="hud-left">
-        <!-- Soldier Class & Stats Panel -->
-        <div class="soldier-panel">
-          <div class="soldier-class-badge">
-            <span id="soldier-class-icon" class="class-badge-icon" style="background: #ff6b6b;">A</span>
-            <span id="soldier-class-name">Assault</span>
-          </div>
-          <div class="soldier-stats-mini">
-            <div class="mini-stat"><span class="mini-stat-icon">HP</span><span id="stat-hp">100</span></div>
-            <div class="mini-stat"><span class="mini-stat-icon">ARM</span><span id="stat-armor">40</span></div>
-            <div class="mini-stat"><span class="mini-stat-icon">SPD</span><span id="stat-speed">100%</span></div>
-            <div class="mini-stat"><span class="mini-stat-icon">ACC</span><span id="stat-accuracy">100%</span></div>
-          </div>
-          <div class="soldier-gear-hud">
-            <div class="gear-hud-label">GEAR</div>
-            <div id="gear-hud-list" class="gear-hud-items">
-              <span class="gear-item-hud" title="Body Armor">Plate Carrier</span>
-              <span class="gear-item-hud" title="Helmet">Combat Helmet</span>
-              <span class="gear-item-hud" title="Equipment">Frag x3</span>
-            </div>
-          </div>
-        </div>
-
         <div class="health-container">
-          <div class="health-label">HEALTH</div>
+          <div class="health-label">HP</div>
           <div class="health-bar">
             <div id="health-fill" class="health-fill"></div>
           </div>
-          <div class="armor-bar">
-            <div id="armor-fill" class="armor-fill"></div>
-          </div>
-        </div>
-        <div class="stance-container">
-          <span id="stance-text">Stand</span>
-        </div>
-        <div class="formation-container">
-          <span class="formation-label">FORMATION:</span>
-          <span id="formation-text">Close Combat</span>
-        </div>
-      </div>
-
-      <div class="hud-center">
-        <div id="enemies-count">Enemies: 5</div>
-        <div class="difficulty-container">
-          <span class="difficulty-label">DIFFICULTY:</span>
-          <span id="difficulty-display">Normal</span>
+          <span id="hp-text" class="hp-text">100</span>
         </div>
       </div>
 
@@ -220,20 +181,6 @@
         </div>
         <div class="grenade-info">
           <div id="grenade-count">FRAG: 2</div>
-        </div>
-        <div class="score-container">
-          <div class="score-label">SCORE</div>
-          <div id="score-display">0</div>
-        </div>
-        <div class="multiplier-container">
-          <div class="multiplier-label">COMBO</div>
-          <div id="multiplier-display">x1</div>
-        </div>
-        <div class="fun-meter-container">
-          <div class="fun-label">FUN METER</div>
-          <div class="fun-meter-bar">
-            <div id="fun-fill" class="fun-fill"></div>
-          </div>
         </div>
       </div>
     </div>

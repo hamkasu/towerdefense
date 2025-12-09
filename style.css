@@ -326,6 +326,13 @@ button {
   transition: width 0.2s ease;
 }
 
+.hp-text {
+  font-size: 0.85rem;
+  color: #ff4757;
+  font-weight: 600;
+  min-width: 30px;
+}
+
 .stance-container {
   font-size: 0.75rem;
   color: #888;
